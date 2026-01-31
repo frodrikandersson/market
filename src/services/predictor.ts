@@ -305,12 +305,12 @@ export async function generatePrediction(
  * Store prediction in database
  */
 async function storePrediction(prediction: PredictionResult): Promise<void> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Use UTC dates for consistency across timezones
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
   // Target date is next trading day (simplified: just tomorrow)
-  const targetDate = new Date(today);
-  targetDate.setDate(targetDate.getDate() + 1);
+  const targetDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
 
   await db.prediction.upsert({
     where: {

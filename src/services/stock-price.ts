@@ -95,9 +95,9 @@ export async function storeDailyPrice(
   close: number,
   volume: bigint
 ): Promise<void> {
-  // Normalize date to midnight
-  const normalizedDate = new Date(date);
-  normalizedDate.setHours(0, 0, 0, 0);
+  // Normalize date to midnight UTC
+  const d = new Date(date);
+  const normalizedDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
   await db.stockPrice.upsert({
     where: {
@@ -143,8 +143,9 @@ export async function fetchAllPrices(): Promise<FetchPricesResult> {
 
   console.log(`[StockPrice] Fetching prices for ${companies.length} companies`);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Use UTC for consistent date handling
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
   for (const company of companies) {
     try {
