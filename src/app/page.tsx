@@ -1,57 +1,14 @@
-import { TrendingUp, TrendingDown, Activity, BarChart3 } from 'lucide-react';
+import { TrendingUp, Activity, BarChart3, RefreshCw } from 'lucide-react';
+import { dashboardData } from '@/services/dashboard-data';
+import type { Sentiment } from '@/types';
 
-// Placeholder data - will be replaced with real data from the database
-const mockPredictions = [
-  {
-    ticker: 'AAPL',
-    name: 'Apple Inc.',
-    price: 182.52,
-    change: 2.34,
-    changePercent: 1.30,
-    fundamentals: { direction: 'up' as const, confidence: 0.78 },
-    hype: { direction: 'up' as const, confidence: 0.65 },
-    wasCorrect: true,
-  },
-  {
-    ticker: 'TSLA',
-    name: 'Tesla, Inc.',
-    price: 241.18,
-    change: -8.42,
-    changePercent: -3.37,
-    fundamentals: { direction: 'down' as const, confidence: 0.82 },
-    hype: { direction: 'up' as const, confidence: 0.71 },
-    wasCorrect: true,
-  },
-  {
-    ticker: 'NVDA',
-    name: 'NVIDIA Corporation',
-    price: 487.92,
-    change: 12.45,
-    changePercent: 2.62,
-    fundamentals: { direction: 'up' as const, confidence: 0.91 },
-    hype: { direction: 'up' as const, confidence: 0.88 },
-    wasCorrect: true,
-  },
-  {
-    ticker: 'META',
-    name: 'Meta Platforms',
-    price: 374.28,
-    change: -2.15,
-    changePercent: -0.57,
-    fundamentals: { direction: 'up' as const, confidence: 0.55 },
-    hype: { direction: 'down' as const, confidence: 0.62 },
-    wasCorrect: false,
-  },
-];
+// Force dynamic rendering to always fetch fresh data
+export const dynamic = 'force-dynamic';
 
-const stats = {
-  fundamentalsAccuracy: 67.3,
-  hypeAccuracy: 54.2,
-  totalPredictions: 1247,
-  todayPredictions: 48,
-};
+export default async function Home() {
+  // Fetch real data from database
+  const data = await dashboardData.getDashboardData();
 
-export default function Home() {
   return (
     <main className="min-h-screen">
       {/* Header */}
@@ -68,13 +25,22 @@ export default function Home() {
               <a href="/" className="text-text-primary hover:text-primary transition-colors">
                 Dashboard
               </a>
-              <a href="/sectors" className="text-text-secondary hover:text-primary transition-colors">
+              <a
+                href="/sectors"
+                className="text-text-secondary hover:text-primary transition-colors"
+              >
                 Sectors
               </a>
-              <a href="/performance" className="text-text-secondary hover:text-primary transition-colors">
+              <a
+                href="/performance"
+                className="text-text-secondary hover:text-primary transition-colors"
+              >
                 Performance
               </a>
-              <a href="/backtest" className="text-text-secondary hover:text-primary transition-colors">
+              <a
+                href="/backtest"
+                className="text-text-secondary hover:text-primary transition-colors"
+              >
                 Backtest
               </a>
             </nav>
@@ -87,26 +53,26 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <StatCard
             label="Fundamentals Accuracy"
-            value={`${stats.fundamentalsAccuracy}%`}
+            value={`${data.stats.fundamentalsAccuracy.toFixed(1)}%`}
             trend={+2.1}
             icon={<BarChart3 className="w-5 h-5" />}
           />
           <StatCard
             label="Hype Model Accuracy"
-            value={`${stats.hypeAccuracy}%`}
+            value={`${data.stats.hypeAccuracy.toFixed(1)}%`}
             trend={-1.3}
             icon={<Activity className="w-5 h-5" />}
             variant="secondary"
           />
           <StatCard
-            label="Total Predictions"
-            value={stats.totalPredictions.toLocaleString()}
+            label="Articles Processed"
+            value={data.stats.articlesProcessed.toLocaleString()}
             icon={<TrendingUp className="w-5 h-5" />}
           />
           <StatCard
-            label="Today's Picks"
-            value={stats.todayPredictions.toString()}
-            icon={<TrendingDown className="w-5 h-5" />}
+            label="Events Today"
+            value={data.stats.eventsToday.toString()}
+            icon={<RefreshCw className="w-5 h-5" />}
           />
         </div>
 
@@ -116,26 +82,30 @@ export default function Home() {
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-text-primary">
-                Today's Predictions
+                Companies with Recent News
               </h2>
-              <div className="flex gap-2">
-                <button className="px-3 py-1 text-sm bg-primary/20 text-primary rounded-md border border-primary/30 hover:bg-primary/30 transition-colors">
-                  All
-                </button>
-                <button className="px-3 py-1 text-sm bg-surface text-text-secondary rounded-md border border-border hover:border-primary/30 transition-colors">
-                  Correct
-                </button>
-                <button className="px-3 py-1 text-sm bg-surface text-text-secondary rounded-md border border-border hover:border-primary/30 transition-colors">
-                  Wrong
-                </button>
+              <div className="text-xs text-text-muted">
+                Updated: {data.lastUpdated.toLocaleTimeString()}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {mockPredictions.map((prediction) => (
-                <StockCard key={prediction.ticker} {...prediction} />
-              ))}
-            </div>
+            {data.predictions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {data.predictions.map((prediction) => (
+                  <StockCard key={prediction.ticker} {...prediction} />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-surface rounded-lg border border-border p-8 text-center">
+                <p className="text-text-secondary mb-2">No news impacts yet</p>
+                <p className="text-text-muted text-sm">
+                  Run the news pipeline to populate data:
+                </p>
+                <code className="text-xs text-primary mt-2 block">
+                  npx tsx scripts/run-news-pipeline.ts
+                </code>
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -150,13 +120,13 @@ export default function Home() {
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-text-secondary">Fundamentals</span>
                     <span className="text-primary font-mono-numbers">
-                      {stats.fundamentalsAccuracy}%
+                      {data.stats.fundamentalsAccuracy.toFixed(1)}%
                     </span>
                   </div>
                   <div className="h-2 bg-background rounded-full overflow-hidden">
                     <div
                       className="h-full bg-primary rounded-full transition-all duration-500"
-                      style={{ width: `${stats.fundamentalsAccuracy}%` }}
+                      style={{ width: `${data.stats.fundamentalsAccuracy}%` }}
                     />
                   </div>
                 </div>
@@ -164,41 +134,40 @@ export default function Home() {
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-text-secondary">Hype Model</span>
                     <span className="text-secondary font-mono-numbers">
-                      {stats.hypeAccuracy}%
+                      {data.stats.hypeAccuracy.toFixed(1)}%
                     </span>
                   </div>
                   <div className="h-2 bg-background rounded-full overflow-hidden">
                     <div
                       className="h-full bg-secondary rounded-full transition-all duration-500"
-                      style={{ width: `${stats.hypeAccuracy}%` }}
+                      style={{ width: `${data.stats.hypeAccuracy}%` }}
                     />
                   </div>
                 </div>
               </div>
+              <p className="text-xs text-text-muted mt-4">
+                Based on {data.stats.totalPredictions} total predictions
+              </p>
             </div>
 
             {/* Latest News Events */}
             <div className="bg-surface rounded-lg border border-border p-6">
-              <h3 className="text-lg font-semibold text-text-primary mb-4">
-                Latest Events
-              </h3>
-              <div className="space-y-3">
-                <NewsEventItem
-                  title="Apple Vision Pro sales exceed expectations in Q1"
-                  time="2h ago"
-                  sentiment="positive"
-                />
-                <NewsEventItem
-                  title="Fed signals potential rate cuts in coming months"
-                  time="4h ago"
-                  sentiment="neutral"
-                />
-                <NewsEventItem
-                  title="Tesla faces production delays at Berlin factory"
-                  time="6h ago"
-                  sentiment="negative"
-                />
-              </div>
+              <h3 className="text-lg font-semibold text-text-primary mb-4">Latest News</h3>
+              {data.newsEvents.length > 0 ? (
+                <div className="space-y-3">
+                  {data.newsEvents.map((event) => (
+                    <NewsEventItem
+                      key={event.id}
+                      title={event.title}
+                      time={event.timeAgo}
+                      sentiment={event.sentiment}
+                      tickers={event.affectedTickers}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-text-muted text-sm">No recent news events</p>
+              )}
             </div>
           </div>
         </div>
@@ -246,9 +215,7 @@ function StatCard({
         {value}
       </div>
       {trend !== undefined && (
-        <div
-          className={`text-sm mt-1 ${trend >= 0 ? 'text-positive' : 'text-negative'}`}
-        >
+        <div className={`text-sm mt-1 ${trend >= 0 ? 'text-positive' : 'text-negative'}`}>
           {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}% vs last week
         </div>
       )}
@@ -259,60 +226,59 @@ function StatCard({
 function StockCard({
   ticker,
   name,
-  price,
-  change,
-  changePercent,
   fundamentals,
   hype,
   wasCorrect,
+  newsImpactScore,
+  sentiment,
 }: {
   ticker: string;
   name: string;
+  sector: string | null;
   price: number;
   change: number;
   changePercent: number;
-  fundamentals: { direction: 'up' | 'down'; confidence: number };
-  hype: { direction: 'up' | 'down'; confidence: number };
-  wasCorrect: boolean;
+  fundamentals: { direction: 'up' | 'down'; confidence: number } | null;
+  hype: { direction: 'up' | 'down'; confidence: number } | null;
+  wasCorrect: boolean | null;
+  newsImpactScore: number;
+  sentiment: Sentiment;
 }) {
+  // Determine border color based on sentiment
+  const borderClass =
+    sentiment === 'positive'
+      ? 'border-positive/50 shadow-glow-green'
+      : sentiment === 'negative'
+        ? 'border-negative/50 shadow-glow-red'
+        : 'border-border';
+
   return (
     <div
-      className={`bg-surface rounded-lg border p-4 transition-all duration-200 hover:bg-surface-elevated ${
-        wasCorrect
-          ? 'border-positive/50 shadow-glow-green'
-          : 'border-negative/50 shadow-glow-red'
-      }`}
+      className={`bg-surface rounded-lg border p-4 transition-all duration-200 hover:bg-surface-elevated ${borderClass}`}
     >
       {/* Header */}
       <div className="flex justify-between items-start mb-3">
         <div>
-          <h3 className="text-xl font-bold font-mono-numbers text-text-primary">
-            {ticker}
-          </h3>
+          <h3 className="text-xl font-bold font-mono-numbers text-text-primary">{ticker}</h3>
           <p className="text-sm text-text-secondary">{name}</p>
         </div>
-        <span
-          className={`px-2 py-1 text-xs font-semibold rounded-md ${
-            wasCorrect
-              ? 'bg-positive/20 text-positive border border-positive/30'
-              : 'bg-negative/20 text-negative border border-negative/30'
-          }`}
-        >
-          {wasCorrect ? '✓ CORRECT' : '✗ WRONG'}
-        </span>
+        <SentimentBadge sentiment={sentiment} wasCorrect={wasCorrect} />
       </div>
 
-      {/* Price */}
+      {/* News Impact Score */}
       <div className="flex items-baseline gap-2 mb-4">
-        <span className="text-3xl font-bold font-mono-numbers text-text-primary">
-          ${price.toFixed(2)}
-        </span>
+        <span className="text-text-muted text-sm">News Impact:</span>
         <span
-          className={`text-lg font-mono-numbers ${
-            changePercent >= 0 ? 'text-positive' : 'text-negative'
+          className={`text-lg font-bold font-mono-numbers ${
+            newsImpactScore > 0
+              ? 'text-positive'
+              : newsImpactScore < 0
+                ? 'text-negative'
+                : 'text-text-secondary'
           }`}
         >
-          {changePercent >= 0 ? '▲' : '▼'} {Math.abs(changePercent).toFixed(2)}%
+          {newsImpactScore > 0 ? '+' : ''}
+          {newsImpactScore.toFixed(2)}
         </span>
       </div>
 
@@ -320,32 +286,72 @@ function StockCard({
       <div className="grid grid-cols-2 gap-2 text-sm">
         <div className="bg-background/50 rounded p-2 border border-border">
           <span className="text-text-muted text-xs block mb-1">FUNDAMENTALS</span>
-          <div className="flex items-center gap-1">
-            <span
-              className={
-                fundamentals.direction === 'up' ? 'text-positive' : 'text-negative'
-              }
-            >
-              {fundamentals.direction === 'up' ? '▲ UP' : '▼ DOWN'}
-            </span>
-            <span className="text-text-secondary text-xs">
-              ({(fundamentals.confidence * 100).toFixed(0)}%)
-            </span>
-          </div>
+          {fundamentals ? (
+            <div className="flex items-center gap-1">
+              <span
+                className={fundamentals.direction === 'up' ? 'text-positive' : 'text-negative'}
+              >
+                {fundamentals.direction === 'up' ? '▲ UP' : '▼ DOWN'}
+              </span>
+              <span className="text-text-secondary text-xs">
+                ({(fundamentals.confidence * 100).toFixed(0)}%)
+              </span>
+            </div>
+          ) : (
+            <span className="text-text-muted text-xs">Pending...</span>
+          )}
         </div>
         <div className="bg-secondary/10 rounded p-2 border border-secondary/30">
           <span className="text-secondary text-xs block mb-1">HYPE MODEL</span>
-          <div className="flex items-center gap-1">
-            <span className={hype.direction === 'up' ? 'text-positive' : 'text-negative'}>
-              {hype.direction === 'up' ? '▲ UP' : '▼ DOWN'}
-            </span>
-            <span className="text-text-secondary text-xs">
-              ({(hype.confidence * 100).toFixed(0)}%)
-            </span>
-          </div>
+          {hype ? (
+            <div className="flex items-center gap-1">
+              <span className={hype.direction === 'up' ? 'text-positive' : 'text-negative'}>
+                {hype.direction === 'up' ? '▲ UP' : '▼ DOWN'}
+              </span>
+              <span className="text-text-secondary text-xs">
+                ({(hype.confidence * 100).toFixed(0)}%)
+              </span>
+            </div>
+          ) : (
+            <span className="text-text-muted text-xs">Pending...</span>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function SentimentBadge({
+  sentiment,
+  wasCorrect,
+}: {
+  sentiment: Sentiment;
+  wasCorrect: boolean | null;
+}) {
+  if (wasCorrect !== null) {
+    return (
+      <span
+        className={`px-2 py-1 text-xs font-semibold rounded-md ${
+          wasCorrect
+            ? 'bg-positive/20 text-positive border border-positive/30'
+            : 'bg-negative/20 text-negative border border-negative/30'
+        }`}
+      >
+        {wasCorrect ? '✓ CORRECT' : '✗ WRONG'}
+      </span>
+    );
+  }
+
+  const sentimentStyles = {
+    positive: 'bg-positive/20 text-positive border border-positive/30',
+    negative: 'bg-negative/20 text-negative border border-negative/30',
+    neutral: 'bg-neutral/20 text-neutral border border-neutral/30',
+  };
+
+  return (
+    <span className={`px-2 py-1 text-xs font-semibold rounded-md ${sentimentStyles[sentiment]}`}>
+      {sentiment === 'positive' ? '📈 BULLISH' : sentiment === 'negative' ? '📉 BEARISH' : '➖ NEUTRAL'}
+    </span>
   );
 }
 
@@ -353,10 +359,12 @@ function NewsEventItem({
   title,
   time,
   sentiment,
+  tickers,
 }: {
   title: string;
   time: string;
-  sentiment: 'positive' | 'negative' | 'neutral';
+  sentiment: Sentiment;
+  tickers: string[];
 }) {
   const sentimentColors = {
     positive: 'bg-positive',
@@ -368,8 +376,13 @@ function NewsEventItem({
     <div className="flex items-start gap-3">
       <div className={`w-2 h-2 rounded-full mt-2 ${sentimentColors[sentiment]}`} />
       <div className="flex-1">
-        <p className="text-sm text-text-primary">{title}</p>
-        <span className="text-xs text-text-muted">{time}</span>
+        <p className="text-sm text-text-primary line-clamp-2">{title}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-xs text-text-muted">{time}</span>
+          {tickers.length > 0 && (
+            <span className="text-xs text-primary">{tickers.slice(0, 3).join(', ')}</span>
+          )}
+        </div>
       </div>
     </div>
   );

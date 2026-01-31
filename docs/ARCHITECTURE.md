@@ -157,14 +157,37 @@ market/
 
 ## Cron Jobs Schedule
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| fetch-news | Every 30 min | Fetch news from NewsAPI + Finnhub |
-| fetch-social | Every 30 min | Fetch posts from tracked accounts |
-| process-news | Every 30 min | Analyze news with Claude |
-| fetch-stocks | 4:30 PM ET | Fetch closing prices |
-| run-predictions | 5:00 PM ET | Generate next-day predictions |
-| evaluate-predictions | 9:30 AM ET | Evaluate yesterday's predictions |
+| Job | Endpoint | Schedule | Description |
+|-----|----------|----------|-------------|
+| Full Pipeline | `/api/cron/full-pipeline` | Every 30 min | Runs all steps below in sequence |
+| Fetch News | `/api/cron/fetch-news` | Every 30 min | Fetch news from NewsAPI + Finnhub |
+| Fetch Social | `/api/cron/fetch-social` | Every 30 min | Fetch posts from tracked accounts |
+| Run Predictions | `/api/cron/run-predictions` | Daily 5 PM ET | Generate predictions + evaluate |
+
+### Cron Endpoint URLs
+
+All cron endpoints require authentication via query parameter or header:
+
+```bash
+# Using query parameter
+curl "https://your-app.railway.app/api/cron/full-pipeline?secret=YOUR_CRON_SECRET"
+
+# Using Authorization header
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
+     "https://your-app.railway.app/api/cron/full-pipeline"
+```
+
+### Railway Cron Setup
+
+Add these cron jobs in Railway dashboard or use an external service:
+
+```
+# Every 30 minutes during market hours (9 AM - 5 PM ET, Mon-Fri)
+*/30 9-17 * * 1-5  curl -X POST "https://your-app.railway.app/api/cron/full-pipeline?secret=$CRON_SECRET"
+
+# Daily prediction run at 5 PM ET
+0 17 * * 1-5       curl -X POST "https://your-app.railway.app/api/cron/run-predictions?secret=$CRON_SECRET"
+```
 
 ## Key Components
 
