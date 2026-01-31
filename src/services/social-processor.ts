@@ -1,8 +1,11 @@
 /**
  * Social Media Processor Service
  * ===============================
- * Fetches and processes social media posts from influential accounts.
+ * Fetches and processes social media posts for stock sentiment analysis.
  * Powers the Hype Model predictions.
+ *
+ * Primary source: Financial news RSS feeds (always available)
+ * These capture influencer statements as reported by news outlets.
  *
  * Usage:
  *   import { socialProcessor } from '@/services/social-processor';
@@ -10,28 +13,13 @@
  */
 
 import { db } from '@/lib/db';
-import { twitter } from '@/lib/twitter';
+import { socialRSS } from '@/lib/social-rss';
 import { gemini } from '@/lib/gemini';
-import type { XTweet, Sentiment } from '@/types';
+import type { Sentiment } from '@/types';
 
 // ===========================================
 // Types
 // ===========================================
-
-interface ProcessedPost {
-  accountId: string;
-  externalId: string;
-  content: string;
-  sentiment: Sentiment | null;
-  impactScore: number | null;
-  metrics: {
-    likes: number;
-    retweets: number;
-    replies: number;
-    quotes: number;
-  };
-  publishedAt: Date;
-}
 
 interface SocialProcessorResult {
   accountsProcessed: number;
@@ -47,121 +35,119 @@ interface SocialProcessorResult {
 // ===========================================
 
 /**
- * Fetch posts from all active influential accounts
+ * Fetch influencer-related posts from financial news RSS feeds
+ * This is the primary source for the Hype Model
  */
-export async function fetchAllPosts(): Promise<Map<string, ProcessedPost[]>> {
-  const results = new Map<string, ProcessedPost[]>();
+export async function fetchRSSPosts(): Promise<{
+  postsFound: number;
+  postsSaved: number;
+  errors: string[];
+}> {
+  const result = { postsFound: 0, postsSaved: 0, errors: [] as string[] };
 
-  // Check if Twitter is configured
-  if (!twitter.isConfigured()) {
-    console.log('[Social] Twitter API not configured - skipping');
-    return results;
+  // Check if RSS is available
+  const rssAvailable = await socialRSS.isAvailable();
+  if (!rssAvailable) {
+    result.errors.push('RSS feeds not available');
+    return result;
   }
 
-  // Get active accounts
-  const accounts = await db.influentialAccount.findMany({
-    where: { isActive: true, platform: 'twitter' },
+  // Get active companies for matching
+  const companies = await db.company.findMany({
+    where: { isActive: true },
+    select: { id: true, ticker: true, name: true },
+  });
+  const tickerToCompany = new Map(companies.map((c) => [c.ticker, c]));
+
+  console.log(`[SocialRSS] Fetching influencer-related news from RSS feeds`);
+
+  // Get or create a "News RSS" account entry for posts
+  let rssAccount = await db.influentialAccount.findFirst({
+    where: { platform: 'rss', handle: 'financial-news' },
   });
 
-  console.log(`[Social] Fetching posts from ${accounts.length} Twitter accounts`);
+  if (!rssAccount) {
+    rssAccount = await db.influentialAccount.create({
+      data: {
+        platform: 'rss',
+        handle: 'financial-news',
+        name: 'Financial News Aggregator',
+        weight: 0.7, // Higher weight since it's curated news
+        isActive: true,
+      },
+    });
+  }
 
-  for (const account of accounts) {
-    try {
-      // Get user ID if not stored
-      let userId = account.userId;
-      if (!userId) {
-        userId = await twitter.getUserId(account.handle);
-        if (userId) {
-          await db.influentialAccount.update({
-            where: { id: account.id },
-            data: { userId },
+  try {
+    // Fetch influencer-related posts from RSS
+    const posts = await socialRSS.fetchAll();
+    result.postsFound = posts.length;
+
+    for (const post of posts) {
+      // Check if post already exists
+      const existing = await db.socialPost.findUnique({
+        where: {
+          accountId_externalId: {
+            accountId: rssAccount.id,
+            externalId: post.id,
+          },
+        },
+      });
+
+      if (existing) continue;
+
+      // Save new post
+      const savedPost = await db.socialPost.create({
+        data: {
+          accountId: rssAccount.id,
+          externalId: post.id,
+          content: post.text,
+          metrics: {
+            likes: post.public_metrics?.like_count || 0,
+            retweets: 0,
+            replies: 0,
+            quotes: 0,
+          },
+          publishedAt: new Date(post.created_at),
+          processed: false,
+        },
+      });
+      result.postsSaved++;
+
+      // Extract tickers and create mentions
+      const tickers = socialRSS.extractTickers(post.text);
+      const sentiment = socialRSS.detectSentiment(post.text);
+
+      for (const ticker of tickers) {
+        const company = tickerToCompany.get(ticker);
+        if (company) {
+          await db.socialMention.upsert({
+            where: {
+              postId_companyId: {
+                postId: savedPost.id,
+                companyId: company.id,
+              },
+            },
+            create: {
+              postId: savedPost.id,
+              companyId: company.id,
+              sentiment,
+              confidence: 0.75, // Good confidence for news-reported content
+            },
+            update: {},
           });
         }
       }
-
-      if (!userId) {
-        console.log(`[Social] Could not find user ID for @${account.handle}`);
-        continue;
-      }
-
-      // Fetch recent tweets
-      const tweets = await twitter.getUserTweets(userId, { maxResults: 10 });
-
-      const posts: ProcessedPost[] = tweets.map((tweet) => ({
-        accountId: account.id,
-        externalId: tweet.id,
-        content: tweet.text,
-        sentiment: null,
-        impactScore: null,
-        metrics: {
-          likes: tweet.public_metrics?.like_count || 0,
-          retweets: tweet.public_metrics?.retweet_count || 0,
-          replies: tweet.public_metrics?.reply_count || 0,
-          quotes: tweet.public_metrics?.quote_count || 0,
-        },
-        publishedAt: new Date(tweet.created_at),
-      }));
-
-      results.set(account.id, posts);
-      console.log(`[Social] @${account.handle}: ${posts.length} tweets`);
-
-      // Rate limit delay
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    } catch (error) {
-      console.error(`[Social] Failed to fetch @${account.handle}:`, error);
     }
+
+    console.log(`[SocialRSS] Found ${result.postsFound} posts, saved ${result.postsSaved} new`);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    result.errors.push(errorMsg);
+    console.error('[SocialRSS] Error:', errorMsg);
   }
 
-  return results;
-}
-
-/**
- * Save posts to database (skip existing)
- */
-export async function savePosts(
-  postsMap: Map<string, ProcessedPost[]>
-): Promise<{ saved: number; skipped: number }> {
-  let saved = 0;
-  let skipped = 0;
-
-  for (const [accountId, posts] of postsMap) {
-    for (const post of posts) {
-      try {
-        // Check if exists
-        const existing = await db.socialPost.findUnique({
-          where: {
-            accountId_externalId: {
-              accountId,
-              externalId: post.externalId,
-            },
-          },
-        });
-
-        if (existing) {
-          skipped++;
-          continue;
-        }
-
-        // Save new post
-        await db.socialPost.create({
-          data: {
-            accountId: post.accountId,
-            externalId: post.externalId,
-            content: post.content,
-            metrics: post.metrics,
-            publishedAt: post.publishedAt,
-            processed: false,
-          },
-        });
-        saved++;
-      } catch (error) {
-        console.error(`[Social] Failed to save post ${post.externalId}:`, error);
-      }
-    }
-  }
-
-  console.log(`[Social] Saved ${saved} new posts, skipped ${skipped} existing`);
-  return { saved, skipped };
+  return result;
 }
 
 /**
@@ -293,29 +279,26 @@ export async function fetchAndProcessSocial(): Promise<SocialProcessorResult> {
   };
 
   try {
-    // Check if configured
-    if (!twitter.isConfigured()) {
-      result.errors.push('Twitter API not configured');
-      console.log('[Social] Twitter API not configured - skipping social processing');
-      return result;
+    // Step 1: Fetch posts from financial news RSS feeds
+    console.log('\n=== Social Step 1: Fetching from Financial News RSS ===');
+    const rssResult = await fetchRSSPosts();
+    result.postsFound += rssResult.postsFound;
+    result.postsSaved += rssResult.postsSaved;
+    result.errors.push(...rssResult.errors);
+
+    if (rssResult.postsFound > 0) {
+      result.accountsProcessed = 1;
     }
 
-    // Step 1: Fetch posts
-    console.log('\n=== Social Step 1: Fetching Posts ===');
-    const postsMap = await fetchAllPosts();
-    result.accountsProcessed = postsMap.size;
-    result.postsFound = Array.from(postsMap.values()).reduce((sum, posts) => sum + posts.length, 0);
-
-    // Step 2: Save posts
-    console.log('\n=== Social Step 2: Saving Posts ===');
-    const { saved } = await savePosts(postsMap);
-    result.postsSaved = saved;
-
-    // Step 3: Analyze with AI
-    console.log('\n=== Social Step 3: AI Analysis ===');
+    // Step 2: Analyze any unprocessed posts with AI
+    console.log('\n=== Social Step 2: AI Analysis ===');
     const { analyzed, mentions } = await analyzeUnprocessedPosts(20);
     result.postsAnalyzed = analyzed;
     result.mentionsCreated = mentions;
+
+    console.log(
+      `[Social] Complete: ${result.postsFound} found, ${result.postsSaved} saved, ${result.mentionsCreated} mentions`
+    );
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     result.errors.push(errorMsg);
@@ -372,8 +355,7 @@ export async function getSocialImpact(
 
 // Export as namespace
 export const socialProcessor = {
-  fetchAllPosts,
-  savePosts,
+  fetchRSSPosts,
   analyzeUnprocessedPosts,
   fetchAndProcessSocial,
   getSocialImpact,
