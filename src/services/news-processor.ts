@@ -13,6 +13,7 @@ import { db } from '@/lib/db';
 import { newsapi } from '@/lib/newsapi';
 import { finnhub } from '@/lib/finnhub';
 import { gemini } from '@/lib/gemini';
+import { companyDiscovery } from '@/services/company-discovery';
 import type {
   NewsAPIArticle,
   FinnhubNewsArticle,
@@ -43,6 +44,7 @@ interface NewsProcessorResult {
   articlesProcessed: number;
   eventsCreated: number;
   impactsCreated: number;
+  companiesDiscovered: number;
   errors: string[];
 }
 
@@ -241,7 +243,7 @@ export async function saveArticles(
  */
 export async function processUnprocessedArticles(
   limit: number = 20
-): Promise<{ processed: number; impacts: number }> {
+): Promise<{ processed: number; impacts: number; companiesDiscovered: number }> {
   // Get unprocessed articles
   const articles = await db.newsArticle.findMany({
     where: { processed: false },
@@ -253,8 +255,9 @@ export async function processUnprocessedArticles(
 
   let processed = 0;
   let impacts = 0;
+  let companiesDiscovered = 0;
 
-  // Get all company tickers for matching
+  // Get all company tickers for matching (will be updated as we discover)
   const companies = await db.company.findMany({
     where: { isActive: true },
     select: { id: true, ticker: true, name: true },
@@ -278,9 +281,24 @@ export async function processUnprocessedArticles(
         },
       });
 
-      // Create impacts for mentioned companies
+      // Create impacts for mentioned companies (auto-discover if not found)
       for (const company of analysis.companies) {
-        const matchedCompany = tickerToCompany.get(company.ticker);
+        let matchedCompany = tickerToCompany.get(company.ticker);
+
+        // Auto-discover company if not in database
+        if (!matchedCompany && company.ticker) {
+          console.log(`[Discovery] Attempting to discover: ${company.ticker}`);
+          const discovered = await companyDiscovery.discoverCompany(company.ticker);
+          if (discovered) {
+            matchedCompany = { id: discovered.id, ticker: discovered.ticker, name: discovered.name };
+            tickerToCompany.set(discovered.ticker, matchedCompany);
+            if (discovered.isNew) {
+              companiesDiscovered++;
+              console.log(`[Discovery] Added new company: ${discovered.ticker} - ${discovered.name}`);
+            }
+          }
+        }
+
         if (matchedCompany) {
           await db.newsImpact.create({
             data: {
@@ -315,8 +333,8 @@ export async function processUnprocessedArticles(
     }
   }
 
-  console.log(`[AI] Processed ${processed} articles, created ${impacts} impacts`);
-  return { processed, impacts };
+  console.log(`[AI] Processed ${processed} articles, created ${impacts} impacts, discovered ${companiesDiscovered} new companies`);
+  return { processed, impacts, companiesDiscovered };
 }
 
 /**
@@ -408,6 +426,7 @@ export async function fetchAndProcessNews(): Promise<NewsProcessorResult> {
     articlesProcessed: 0,
     eventsCreated: 0,
     impactsCreated: 0,
+    companiesDiscovered: 0,
     errors: [],
   };
 
@@ -422,11 +441,12 @@ export async function fetchAndProcessNews(): Promise<NewsProcessorResult> {
     const { saved } = await saveArticles(articles);
     result.articlesSaved = saved;
 
-    // Step 3: Process with AI
-    console.log('\n=== Step 3: AI Processing ===');
-    const { processed, impacts } = await processUnprocessedArticles(20);
+    // Step 3: Process with AI (includes auto-discovery)
+    console.log('\n=== Step 3: AI Processing + Company Discovery ===');
+    const { processed, impacts, companiesDiscovered } = await processUnprocessedArticles(20);
     result.articlesProcessed = processed;
     result.impactsCreated = impacts;
+    result.companiesDiscovered = companiesDiscovered;
 
     // Step 4: Cluster into events
     console.log('\n=== Step 4: Event Clustering ===');

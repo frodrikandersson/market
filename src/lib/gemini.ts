@@ -69,7 +69,7 @@ export async function analyzeNewsArticle(
 ): Promise<ClaudeNewsAnalysis> {
   const model = getClient().getGenerativeModel({ model: MODEL_NAME });
 
-  const prompt = `Analyze this news article for stock market impact.
+  const prompt = `Analyze this news article for stock market impact. Be critical and realistic about sentiment.
 
 ARTICLE TITLE: ${title}
 
@@ -92,14 +92,16 @@ Provide your analysis in the following JSON format (and ONLY JSON, no other text
   "importance": 0.75
 }
 
-Guidelines:
-- Only include publicly traded companies
-- Use standard US ticker symbols
-- Sentiment must be: positive, negative, or neutral
-- Confidence should be 0-1 (how sure you are about the sentiment)
-- Importance should be 0-1 (how significant is this news for the market)
-- Category should describe the type of news event
-- If no companies are clearly affected, return an empty companies array
+CRITICAL SENTIMENT GUIDELINES:
+- NEGATIVE sentiment for: layoffs, losses, missed earnings, lawsuits, scandals, SEC investigations, product failures, recalls, data breaches, executive departures, downgrades, price target cuts, declining revenue, competitive losses, regulatory fines
+- POSITIVE sentiment for: beat earnings, new products, partnerships, acquisitions, upgrades, price target raises, growth, market share gains, positive guidance
+- NEUTRAL sentiment for: routine announcements, mixed results, unchanged outlook
+
+Other guidelines:
+- Only include publicly traded companies with US ticker symbols
+- Confidence 0-1 (certainty of sentiment analysis)
+- Importance 0-1 (market significance - high for earnings, M&A, major news)
+- If no companies clearly affected, return empty companies array
 - Return ONLY valid JSON, no explanations or markdown`;
 
   const result = await model.generateContent(prompt);
