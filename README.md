@@ -32,7 +32,7 @@ Track predictions with red/green accuracy indicators and see which model perform
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+ (required for Prisma 7 and Next.js 16)
 - PostgreSQL database
 - API keys for:
   - [Anthropic Claude](https://console.anthropic.com)
@@ -111,6 +111,23 @@ market/
 | `npm run db:migrate` | Run migrations |
 | `npm run db:seed` | Seed companies & influencers |
 | `npm run db:studio` | Open Prisma Studio |
+
+## Development Workflow
+
+Before pushing changes or deploying, always run linting to catch errors:
+
+```bash
+# Check for lint errors
+npm run lint
+
+# Fix auto-fixable issues
+npm run lint -- --fix
+
+# Build to verify everything compiles
+npm run build
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#development-workflow) for more details on the pre-commit checklist.
 
 ## Environment Variables
 

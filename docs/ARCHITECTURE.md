@@ -238,6 +238,31 @@ See `.env.example` for the full list. Key variables:
 - `TWITTER_BEARER_TOKEN` - X API bearer token
 - `CRON_SECRET` - Secret for securing cron endpoints
 
+## Development Workflow
+
+Before pushing changes, always run linting to catch errors:
+
+```bash
+# Run ESLint to check for errors
+npm run lint
+
+# Fix auto-fixable issues
+npm run lint -- --fix
+```
+
+Common lint issues to watch for:
+- Unused imports and variables
+- Missing TypeScript types
+- React hook dependency warnings
+- Console.log statements (remove before production)
+
+### Pre-commit Checklist
+
+1. Run `npm run lint` and fix any errors
+2. Run `npm run build` to verify the build succeeds
+3. Test locally with `npm run dev`
+4. Commit and push
+
 ## Deployment
 
 The app is designed to deploy on Railway:
