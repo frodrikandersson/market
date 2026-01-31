@@ -13,6 +13,7 @@ import { db } from '@/lib/db';
 import { stockPriceService } from '@/services/stock-price';
 import { predictor } from '@/services/predictor';
 import { evaluator } from '@/services/evaluator';
+import { autoTrader } from '@/services/auto-trader';
 import type { Prisma } from '@prisma/client';
 
 /**
@@ -92,6 +93,7 @@ export async function GET(request: NextRequest) {
       prices: { fetched: 0, failed: 0 },
       predictions: { fundamentalsPredictions: 0, hypePredictions: 0, errors: [] as string[] },
       evaluations: { evaluated: 0, correct: 0, incorrect: 0, errors: [] as string[] },
+      autoTrader: { tradesExecuted: 0, buyOrders: 0, sellOrders: 0, errors: [] as string[] },
     };
 
     // Step 1: Fetch latest stock prices (sample of companies to avoid rate limits)
@@ -108,6 +110,16 @@ export async function GET(request: NextRequest) {
     console.log('\n=== Step 3: Evaluating Previous Predictions ===');
     const evaluationResult = await evaluator.evaluatePendingPredictions();
     results.evaluations = evaluationResult;
+
+    // Step 4: Execute auto-trades based on predictions
+    console.log('\n=== Step 4: Running Auto-Trader ===');
+    const autoTradeResult = await autoTrader.executeFromPredictions();
+    results.autoTrader = {
+      tradesExecuted: autoTradeResult.tradesExecuted,
+      buyOrders: autoTradeResult.buyOrders,
+      sellOrders: autoTradeResult.sellOrders,
+      errors: autoTradeResult.errors,
+    };
 
     const duration = Date.now() - startTime;
 

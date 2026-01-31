@@ -9,7 +9,7 @@ const navItems = [
   { href: '/stocks', label: 'Stocks' },
   { href: '/sectors', label: 'Sectors' },
   { href: '/performance', label: 'Performance' },
-  { href: '/paper-trading', label: 'Paper Trading' },
+  { href: '/ai-trader', label: 'AI Trader' },
   { href: '/backtest', label: 'Backtest' },
 ];
 
