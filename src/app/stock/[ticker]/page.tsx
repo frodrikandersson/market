@@ -7,11 +7,11 @@ import {
   Newspaper,
   MessageCircle,
   Calendar,
-  Target,
 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { stockData } from '@/services/stock-data';
+import { PriceChart } from '@/components/PriceChart';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,10 +29,6 @@ export default async function StockDetailPage({ params }: PageProps) {
 
   const { company, latestPrice, predictions, accuracy, priceHistory, recentNews, recentSocial } =
     data;
-
-  // Calculate price range for mini chart
-  const priceMin = priceHistory.length > 0 ? Math.min(...priceHistory.map((p) => p.low)) : 0;
-  const priceMax = priceHistory.length > 0 ? Math.max(...priceHistory.map((p) => p.high)) : 0;
 
   return (
     <main className="min-h-screen">
@@ -348,60 +344,9 @@ export default async function StockDetailPage({ params }: PageProps) {
         <div className="bg-surface rounded-lg border border-border p-6 mb-8">
           <h2 className="text-xl font-semibold text-text-primary mb-4 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-primary" />
-            Price History (30 Days)
+            {company.ticker} Price History
           </h2>
-          {priceHistory.length > 0 ? (
-            <div className="h-48 flex items-end gap-1">
-              {priceHistory.map((point, i) => {
-                const height =
-                  priceMax !== priceMin
-                    ? ((point.close - priceMin) / (priceMax - priceMin)) * 100
-                    : 50;
-                const isUp = point.close >= point.open;
-                return (
-                  <div
-                    key={i}
-                    className="flex-1 flex flex-col justify-end group relative"
-                    style={{ height: '100%' }}
-                  >
-                    <div
-                      className={`w-full rounded-t transition-all ${
-                        isUp ? 'bg-positive/60 hover:bg-positive' : 'bg-negative/60 hover:bg-negative'
-                      }`}
-                      style={{ height: `${Math.max(height, 5)}%` }}
-                    />
-                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-surface-elevated border border-border rounded px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                      <div className="font-mono-numbers">${point.close.toFixed(2)}</div>
-                      <div className="text-text-muted">
-                        {point.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-text-muted text-sm">No price history available</p>
-          )}
-          {priceHistory.length > 0 && (
-            <div className="flex justify-between mt-4 text-xs text-text-muted">
-              <span>
-                {priceHistory[0].date.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </span>
-              <span className="font-mono-numbers">
-                Range: ${priceMin.toFixed(2)} - ${priceMax.toFixed(2)}
-              </span>
-              <span>
-                {priceHistory[priceHistory.length - 1].date.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </span>
-            </div>
-          )}
+          <PriceChart data={priceHistory} ticker={company.ticker} />
         </div>
 
         {/* News and Social Grid */}
