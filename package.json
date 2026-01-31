@@ -4,7 +4,7 @@
   "description": "Stock market prediction web app with dual AI models (Hype vs Fundamentals)",
   "private": true,
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "next dev",

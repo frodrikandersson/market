@@ -32,7 +32,7 @@ Track predictions with red/green accuracy indicators and see which model perform
 
 ### Prerequisites
 
-- Node.js 20+ (required for Prisma 7 and Next.js 16)
+- Node.js 22+ (or 20.19+) - required for Prisma 7
 - PostgreSQL database
 - API keys for:
   - [Anthropic Claude](https://console.anthropic.com)
