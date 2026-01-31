@@ -13,6 +13,7 @@ import { db } from '@/lib/db';
 import { stockPriceService } from '@/services/stock-price';
 import { predictor } from '@/services/predictor';
 import { evaluator } from '@/services/evaluator';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Verify the request is authorized
@@ -49,7 +50,7 @@ async function logCronJob(
   try {
     if (status === 'running') {
       return await db.cronJob.create({
-        data: { name, status, metadata: metadata ?? undefined },
+        data: { name, status, metadata: (metadata ?? undefined) as Prisma.InputJsonValue | undefined },
       });
     } else {
       const job = await db.cronJob.findFirst({
@@ -63,7 +64,7 @@ async function logCronJob(
           data: {
             status,
             completedAt: new Date(),
-            metadata: metadata ?? undefined,
+            metadata: (metadata ?? undefined) as Prisma.InputJsonValue | undefined,
             error,
           },
         });
@@ -89,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     const results = {
       prices: { fetched: 0, failed: 0 },
-      predictions: { fundamentals: 0, hype: 0, errors: [] as string[] },
+      predictions: { fundamentalsPredictions: 0, hypePredictions: 0, errors: [] as string[] },
       evaluations: { evaluated: 0, correct: 0, incorrect: 0, errors: [] as string[] },
     };
 

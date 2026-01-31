@@ -20,6 +20,7 @@ import { socialProcessor } from '@/services/social-processor';
 import { predictor } from '@/services/predictor';
 import { evaluator } from '@/services/evaluator';
 import { stockPriceService } from '@/services/stock-price';
+import type { Prisma } from '@prisma/client';
 
 function isAuthorized(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
@@ -50,7 +51,7 @@ async function logCronJob(
   try {
     if (status === 'running') {
       return await db.cronJob.create({
-        data: { name, status, metadata: metadata ?? undefined },
+        data: { name, status, metadata: (metadata ?? undefined) as Prisma.InputJsonValue | undefined },
       });
     } else {
       const job = await db.cronJob.findFirst({
@@ -64,7 +65,7 @@ async function logCronJob(
           data: {
             status,
             completedAt: new Date(),
-            metadata: metadata ?? undefined,
+            metadata: (metadata ?? undefined) as Prisma.InputJsonValue | undefined,
             error,
           },
         });

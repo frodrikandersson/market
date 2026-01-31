@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { newsProcessor } from '@/services/news-processor';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Verify the request is authorized to run cron jobs
@@ -54,7 +55,7 @@ async function logCronJob(
         data: {
           name,
           status,
-          metadata: metadata ?? undefined,
+          metadata: (metadata ?? undefined) as Prisma.InputJsonValue | undefined,
         },
       });
     } else {
@@ -70,7 +71,7 @@ async function logCronJob(
           data: {
             status,
             completedAt: new Date(),
-            metadata: metadata ?? undefined,
+            metadata: (metadata ?? undefined) as Prisma.InputJsonValue | undefined,
             error,
           },
         });
