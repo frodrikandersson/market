@@ -381,18 +381,36 @@ export async function getRecentArticles(limit: number = 10): Promise<NewsEventIt
  * Get full dashboard data
  */
 export async function getDashboardData(): Promise<DashboardData> {
-  const [stats, predictions, newsEvents] = await Promise.all([
-    getStats(),
-    getCompaniesWithImpacts(8),
-    getRecentArticles(5),
-  ]);
+  try {
+    const [stats, predictions, newsEvents] = await Promise.all([
+      getStats(),
+      getCompaniesWithImpacts(8),
+      getRecentArticles(5),
+    ]);
 
-  return {
-    stats,
-    predictions,
-    newsEvents,
-    lastUpdated: new Date(),
-  };
+    return {
+      stats,
+      predictions,
+      newsEvents,
+      lastUpdated: new Date(),
+    };
+  } catch (error) {
+    console.error('Failed to fetch dashboard data:', error);
+    // Return fallback data when database is unavailable
+    return {
+      stats: {
+        fundamentalsAccuracy: 0,
+        hypeAccuracy: 0,
+        totalPredictions: 0,
+        todayPredictions: 0,
+        articlesProcessed: 0,
+        eventsToday: 0,
+      },
+      predictions: [],
+      newsEvents: [],
+      lastUpdated: new Date(),
+    };
+  }
 }
 
 // Export as namespace
