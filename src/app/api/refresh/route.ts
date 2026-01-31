@@ -55,7 +55,7 @@ export async function POST() {
     // Step 3: Generate predictions
     console.log('[REFRESH] Step 3: Generating predictions...');
     try {
-      const predResult = await predictor.generateAllPredictions();
+      const predResult = await predictor.runDailyPredictions();
       results.predictions.generated = predResult.predictionsGenerated;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);

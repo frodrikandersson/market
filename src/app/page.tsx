@@ -2,6 +2,7 @@ import { TrendingUp, Activity, BarChart3, RefreshCw } from 'lucide-react';
 import { dashboardData } from '@/services/dashboard-data';
 import { RefreshButton } from '@/components/RefreshButton';
 import { RedditSentimentMeter } from '@/components/RedditSentimentMeter';
+import { Header } from '@/components/Header';
 import type { Sentiment } from '@/types';
 
 // Force dynamic rendering to always fetch fresh data
@@ -13,48 +14,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen">
-      {/* Header */}
-      <header className="border-b border-border bg-surface/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Activity className="w-8 h-8 text-primary" />
-              <h1 className="text-2xl font-display font-bold text-gradient">
-                MARKET PREDICTOR
-              </h1>
-            </div>
-            <nav className="flex items-center gap-6">
-              <a href="/" className="text-text-primary hover:text-primary transition-colors">
-                Dashboard
-              </a>
-              <a
-                href="/sectors"
-                className="text-text-secondary hover:text-primary transition-colors"
-              >
-                Sectors
-              </a>
-              <a
-                href="/performance"
-                className="text-text-secondary hover:text-primary transition-colors"
-              >
-                Performance
-              </a>
-              <a
-                href="/paper-trading"
-                className="text-text-secondary hover:text-primary transition-colors"
-              >
-                Paper Trading
-              </a>
-              <a
-                href="/backtest"
-                className="text-text-secondary hover:text-primary transition-colors"
-              >
-                Backtest
-              </a>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <div className="container mx-auto px-4 py-8">
         {/* Stats Overview */}

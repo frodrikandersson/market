@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { backtestData } from '@/services/backtest-data';
+import { Header } from '@/components/Header';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,37 +21,7 @@ export default async function BacktestPage() {
 
   return (
     <main className="min-h-screen">
-      {/* Header */}
-      <header className="border-b border-border bg-surface/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Activity className="w-8 h-8 text-primary" />
-              <h1 className="text-2xl font-display font-bold text-gradient">MARKET PREDICTOR</h1>
-            </div>
-            <nav className="flex items-center gap-6">
-              <Link href="/" className="text-text-secondary hover:text-primary transition-colors">
-                Dashboard
-              </Link>
-              <Link
-                href="/sectors"
-                className="text-text-secondary hover:text-primary transition-colors"
-              >
-                Sectors
-              </Link>
-              <Link
-                href="/performance"
-                className="text-text-secondary hover:text-primary transition-colors"
-              >
-                Performance
-              </Link>
-              <Link href="/backtest" className="text-text-primary hover:text-primary transition-colors">
-                Backtest
-              </Link>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <div className="container mx-auto px-4 py-8">
         {/* Back Link */}
