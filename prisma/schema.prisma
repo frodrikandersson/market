@@ -248,3 +248,65 @@ model SystemConfig {
   value     String   @db.Text
   updatedAt DateTime @updatedAt
 }
+
+// ===========================================
+// Paper Trading Models
+// ===========================================
+
+/// PaperPortfolio model - virtual trading portfolio
+model PaperPortfolio {
+  id             String   @id @default(cuid())
+  name           String   @default("My Portfolio")
+  startingCash   Float    @default(100000) /// Initial cash balance
+  currentCash    Float    @default(100000) /// Available cash
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  positions PaperPosition[]
+  trades    PaperTrade[]
+
+  @@index([isActive])
+}
+
+/// PaperPosition model - current stock holdings in portfolio
+model PaperPosition {
+  id          String         @id @default(cuid())
+  portfolioId String
+  portfolio   PaperPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  companyId   String
+  ticker      String         /// Denormalized for quick access
+  shares      Float          /// Number of shares held
+  avgCost     Float          /// Average cost per share
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([portfolioId, companyId])
+  @@index([portfolioId])
+}
+
+/// PaperTrade model - trade history
+model PaperTrade {
+  id          String         @id @default(cuid())
+  portfolioId String
+  portfolio   PaperPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  companyId   String
+  ticker      String         /// Denormalized for quick access
+  type        String         /// "buy" or "sell"
+  shares      Float          /// Number of shares traded
+  price       Float          /// Price per share at execution
+  totalValue  Float          /// Total trade value (shares * price)
+
+  // Optional: Link to prediction that triggered this trade
+  predictionId String?
+  modelType    String?       /// Which model suggested this trade
+
+  // Execution details
+  executedAt   DateTime      @default(now())
+  note         String?       /// Optional trade notes
+
+  @@index([portfolioId])
+  @@index([executedAt])
+  @@index([ticker])
+}

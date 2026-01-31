@@ -40,6 +40,12 @@ export default async function Home() {
                 Performance
               </a>
               <a
+                href="/paper-trading"
+                className="text-text-secondary hover:text-primary transition-colors"
+              >
+                Paper Trading
+              </a>
+              <a
                 href="/backtest"
                 className="text-text-secondary hover:text-primary transition-colors"
               >
