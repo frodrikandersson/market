@@ -4,8 +4,9 @@
  * Fetches and processes social media posts for stock sentiment analysis.
  * Powers the Hype Model predictions.
  *
- * Primary source: Financial news RSS feeds (always available)
- * These capture influencer statements as reported by news outlets.
+ * Sources:
+ * 1. Financial news RSS feeds (influencer statements via news)
+ * 2. Reddit r/wallstreetbets (retail investor sentiment)
  *
  * Usage:
  *   import { socialProcessor } from '@/services/social-processor';
@@ -14,6 +15,7 @@
 
 import { db } from '@/lib/db';
 import { socialRSS } from '@/lib/social-rss';
+import { reddit } from '@/lib/reddit';
 import { gemini } from '@/lib/gemini';
 import type { Sentiment } from '@/types';
 
@@ -145,6 +147,124 @@ export async function fetchRSSPosts(): Promise<{
     const errorMsg = error instanceof Error ? error.message : String(error);
     result.errors.push(errorMsg);
     console.error('[SocialRSS] Error:', errorMsg);
+  }
+
+  return result;
+}
+
+/**
+ * Fetch posts from Reddit r/wallstreetbets
+ */
+export async function fetchRedditPosts(): Promise<{
+  postsFound: number;
+  postsSaved: number;
+  errors: string[];
+}> {
+  const result = { postsFound: 0, postsSaved: 0, errors: [] as string[] };
+
+  // Check if Reddit is available
+  const redditAvailable = await reddit.isAvailable();
+  if (!redditAvailable) {
+    result.errors.push('Reddit API not available');
+    return result;
+  }
+
+  // Get active companies for matching
+  const companies = await db.company.findMany({
+    where: { isActive: true },
+    select: { id: true, ticker: true, name: true },
+  });
+  const tickerToCompany = new Map(companies.map((c) => [c.ticker, c]));
+
+  console.log(`[Reddit] Fetching r/wallstreetbets posts...`);
+
+  // Get or create the WSB account entry
+  let wsbAccount = await db.influentialAccount.findFirst({
+    where: { platform: 'reddit', handle: 'wallstreetbets' },
+  });
+
+  if (!wsbAccount) {
+    wsbAccount = await db.influentialAccount.create({
+      data: {
+        platform: 'reddit',
+        handle: 'wallstreetbets',
+        name: 'r/WallStreetBets',
+        weight: 0.8, // High weight - WSB has significant market influence
+        isActive: true,
+      },
+    });
+    console.log(`[Reddit] Created WSB account entry`);
+  }
+
+  try {
+    // Fetch posts from hot, new, and rising
+    const posts = await reddit.fetchAllWSB(25);
+    result.postsFound = posts.length;
+
+    for (const post of posts) {
+      // Check if post already exists
+      const existing = await db.socialPost.findUnique({
+        where: {
+          accountId_externalId: {
+            accountId: wsbAccount.id,
+            externalId: post.id,
+          },
+        },
+      });
+
+      if (existing) continue;
+
+      // Calculate engagement score
+      const engagement = reddit.calculateEngagement(post);
+
+      // Save new post
+      const savedPost = await db.socialPost.create({
+        data: {
+          accountId: wsbAccount.id,
+          externalId: post.id,
+          content: `${post.title}\n\n${post.content}`.substring(0, 5000),
+          sentiment: post.sentiment,
+          impactScore: engagement * (post.sentiment === 'positive' ? 1 : post.sentiment === 'negative' ? -1 : 0),
+          metrics: {
+            score: post.score,
+            upvoteRatio: post.upvoteRatio,
+            comments: post.commentCount,
+            flair: post.flair,
+          },
+          publishedAt: post.createdAt,
+          processed: true, // Already analyzed during fetch
+        },
+      });
+      result.postsSaved++;
+
+      // Create mentions for each ticker found
+      for (const ticker of post.tickers) {
+        const company = tickerToCompany.get(ticker);
+        if (company) {
+          await db.socialMention.upsert({
+            where: {
+              postId_companyId: {
+                postId: savedPost.id,
+                companyId: company.id,
+              },
+            },
+            create: {
+              postId: savedPost.id,
+              companyId: company.id,
+              sentiment: post.sentiment,
+              confidence: Math.min(0.9, 0.5 + engagement), // Higher engagement = higher confidence
+            },
+            update: {},
+          });
+        }
+      }
+    }
+
+    console.log(`[Reddit] Found ${result.postsFound} posts, saved ${result.postsSaved} new`);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    result.errors.push(errorMsg);
+    console.error('[Reddit] Error:', errorMsg);
   }
 
   return result;
@@ -287,11 +407,22 @@ export async function fetchAndProcessSocial(): Promise<SocialProcessorResult> {
     result.errors.push(...rssResult.errors);
 
     if (rssResult.postsFound > 0) {
-      result.accountsProcessed = 1;
+      result.accountsProcessed++;
     }
 
-    // Step 2: Analyze any unprocessed posts with AI
-    console.log('\n=== Social Step 2: AI Analysis ===');
+    // Step 2: Fetch posts from Reddit r/wallstreetbets
+    console.log('\n=== Social Step 2: Fetching from Reddit r/wallstreetbets ===');
+    const redditResult = await fetchRedditPosts();
+    result.postsFound += redditResult.postsFound;
+    result.postsSaved += redditResult.postsSaved;
+    result.errors.push(...redditResult.errors);
+
+    if (redditResult.postsFound > 0) {
+      result.accountsProcessed++;
+    }
+
+    // Step 3: Analyze any unprocessed posts with AI
+    console.log('\n=== Social Step 3: AI Analysis ===');
     const { analyzed, mentions } = await analyzeUnprocessedPosts(20);
     result.postsAnalyzed = analyzed;
     result.mentionsCreated = mentions;
@@ -356,6 +487,7 @@ export async function getSocialImpact(
 // Export as namespace
 export const socialProcessor = {
   fetchRSSPosts,
+  fetchRedditPosts,
   analyzeUnprocessedPosts,
   fetchAndProcessSocial,
   getSocialImpact,
