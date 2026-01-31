@@ -85,7 +85,7 @@ export default async function Home() {
                 Companies with Recent News
               </h2>
               <div className="text-xs text-text-muted">
-                Updated: {data.lastUpdated.toLocaleTimeString()}
+                Updated: {data.lastUpdated.toISOString().slice(0, 16).replace('T', ' ')} UTC
               </div>
             </div>
 
