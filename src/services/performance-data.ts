@@ -375,7 +375,7 @@ export async function getPerformanceData(): Promise<PerformanceData> {
       getAccuracyOverTime(30),
       getAccuracyByConfidence(),
       getAccuracyBySector(),
-      getRecentPredictions(20),
+      getRecentPredictions(500),
       getStreaks(),
     ]);
 
