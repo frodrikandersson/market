@@ -1,0 +1,249 @@
+// ===========================================
+// MARKET PREDICTOR - Database Schema
+// ===========================================
+// Prisma schema for stock market prediction app
+// Documentation: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ===========================================
+// Core Models
+// ===========================================
+
+/// Company model - tracks publicly traded companies
+model Company {
+  id        String   @id @default(cuid())
+  ticker    String   @unique /// Stock ticker symbol (e.g., AAPL)
+  name      String /// Company name (e.g., Apple Inc.)
+  sector    String? /// Business sector (Technology, Finance, etc.)
+  industry  String? /// Specific industry
+  marketCap Float? /// Market capitalization in USD
+  isActive  Boolean  @default(true) /// Whether actively tracking
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  stockPrices    StockPrice[]
+  newsImpacts    NewsImpact[]
+  predictions    Prediction[]
+  socialMentions SocialMention[]
+
+  @@index([sector])
+  @@index([isActive])
+}
+
+/// StockPrice model - daily OHLCV price data
+model StockPrice {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date /// Trading date
+  open      Float /// Opening price
+  high      Float /// High price
+  low       Float /// Low price
+  close     Float /// Closing price
+  volume    BigInt /// Trading volume
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, date])
+  @@index([date])
+}
+
+// ===========================================
+// News & Events Models
+// ===========================================
+
+/// NewsArticle model - individual news articles from various sources
+model NewsArticle {
+  id          String   @id @default(cuid())
+  sourceId    String /// Source identifier (newsapi, finnhub)
+  externalId  String? /// Original article ID from source
+  title       String /// Article headline
+  content     String?  @db.Text /// Full article content
+  summary     String?  @db.Text /// AI-generated summary
+  url         String /// Article URL
+  imageUrl    String? /// Thumbnail image URL
+  author      String? /// Article author
+  publishedAt DateTime /// Publication timestamp
+  fetchedAt   DateTime @default(now()) /// When we fetched it
+  processed   Boolean  @default(false) /// Has been processed by AI
+
+  // Event clustering
+  eventId String?
+  event   NewsEvent? @relation(fields: [eventId], references: [id])
+
+  // Relations
+  impacts NewsImpact[]
+
+  @@unique([sourceId, url])
+  @@index([publishedAt])
+  @@index([processed])
+}
+
+/// NewsEvent model - clustered group of related articles about the same event
+model NewsEvent {
+  id         String   @id @default(cuid())
+  summary    String   @db.Text /// AI-generated event summary
+  category   String /// Event type: earnings, regulation, M&A, disaster, macro, etc.
+  importance Float /// Importance score 0-1
+  createdAt  DateTime @default(now())
+
+  // Relations
+  articles NewsArticle[]
+  impacts  NewsImpact[]
+
+  @@index([category])
+  @@index([createdAt])
+}
+
+/// NewsImpact model - tracks how news affects specific companies
+model NewsImpact {
+  id          String       @id @default(cuid())
+  companyId   String
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  articleId   String?
+  article     NewsArticle? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  eventId     String?
+  event       NewsEvent?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  sentiment   String /// positive, negative, neutral
+  confidence  Float /// Confidence in sentiment 0-1
+  impactScore Float /// Calculated impact score
+  reason      String? @db.Text /// Why this sentiment was determined
+  createdAt   DateTime @default(now())
+
+  @@index([companyId])
+  @@index([createdAt])
+}
+
+// ===========================================
+// Social Media Models (Hype Model)
+// ===========================================
+
+/// InfluentialAccount model - tracks social media accounts to monitor
+model InfluentialAccount {
+  id        String   @id @default(cuid())
+  platform  String /// twitter, truthsocial, etc.
+  handle    String /// @username
+  name      String /// Display name (e.g., "Elon Musk")
+  userId    String? /// Platform-specific user ID
+  weight    Float    @default(1.0) /// Influence weight for scoring
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  posts SocialPost[]
+
+  @@unique([platform, handle])
+  @@index([platform])
+  @@index([isActive])
+}
+
+/// SocialPost model - individual posts from influential accounts
+model SocialPost {
+  id          String             @id @default(cuid())
+  accountId   String
+  account     InfluentialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  externalId  String /// Platform-specific post ID
+  content     String             @db.Text /// Post text content
+  sentiment   String? /// positive, negative, neutral
+  impactScore Float? /// Calculated impact score
+  metrics     Json? /// Engagement metrics (likes, retweets, etc.)
+  publishedAt DateTime /// When the post was made
+  fetchedAt   DateTime           @default(now())
+  processed   Boolean            @default(false)
+
+  // Relations
+  mentions SocialMention[]
+
+  @@unique([accountId, externalId])
+  @@index([publishedAt])
+  @@index([processed])
+}
+
+/// SocialMention model - tracks company mentions in social posts
+model SocialMention {
+  id         String     @id @default(cuid())
+  postId     String
+  post       SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  companyId  String
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sentiment  String /// positive, negative, neutral
+  confidence Float /// 0-1
+  createdAt  DateTime   @default(now())
+
+  @@unique([postId, companyId])
+  @@index([companyId])
+}
+
+// ===========================================
+// Prediction Models
+// ===========================================
+
+/// Prediction model - stores predictions from both models
+model Prediction {
+  id         String  @id @default(cuid())
+  companyId  String
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  predictionDate DateTime @db.Date /// Date prediction was made
+  targetDate     DateTime @db.Date /// Date being predicted (next trading day)
+
+  // Model type: "fundamentals" or "hype"
+  modelType String
+
+  // Prediction details
+  predictedDirection String /// up, down
+  confidence         Float /// 0-1
+
+  // Input factors (for explainability)
+  newsImpactScore   Float? /// Aggregated news score (fundamentals)
+  socialImpactScore Float? /// Aggregated social score (hype)
+  priceVolatility   Float? /// Recent price volatility
+  priceMomentum     Float? /// Recent price trend
+
+  // Actual result (filled after market close)
+  actualDirection String? /// up, down, flat
+  actualChange    Float? /// Percentage change
+  wasCorrect      Boolean?
+
+  createdAt   DateTime  @default(now())
+  evaluatedAt DateTime? /// When the prediction was evaluated
+
+  @@unique([companyId, targetDate, modelType])
+  @@index([modelType])
+  @@index([targetDate])
+  @@index([wasCorrect])
+}
+
+// ===========================================
+// System Models
+// ===========================================
+
+/// CronJob model - tracks scheduled job executions
+model CronJob {
+  id          String    @id @default(cuid())
+  name        String /// Job name (fetch-news, run-predictions, etc.)
+  status      String /// running, completed, failed
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  error       String?   @db.Text
+  metadata    Json? /// Additional job-specific data
+
+  @@index([name])
+  @@index([startedAt])
+}
+
+/// SystemConfig model - stores system-wide configuration
+model SystemConfig {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,233 @@
+/* Import Google Fonts - must be first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Orbitron:wght@500;600;700;800&display=swap');
+
+/* Import Tailwind CSS v4 */
+@import "tailwindcss";
+
+/* Dark mode variant */
+@variant dark (&:where(.dark, .dark *));
+
+/* ===========================================
+   Theme Configuration - Financial Cyber Theme
+   =========================================== */
+@theme {
+  /* Base colors (dark theme) */
+  --color-background: #0a0a0f;
+  --color-surface: #12121a;
+  --color-surface-elevated: #1a1a25;
+
+  /* Primary accent (neon cyan) */
+  --color-primary: #00f0ff;
+  --color-primary-50: #e6feff;
+  --color-primary-100: #ccfdff;
+  --color-primary-200: #99fbff;
+  --color-primary-300: #66f8ff;
+  --color-primary-400: #33f4ff;
+  --color-primary-500: #00f0ff;
+  --color-primary-600: #00c0cc;
+  --color-primary-700: #009099;
+  --color-primary-800: #006066;
+  --color-primary-900: #003033;
+
+  /* Secondary accent (purple) */
+  --color-secondary: #7b61ff;
+  --color-secondary-50: #f3f1ff;
+  --color-secondary-100: #e7e3ff;
+  --color-secondary-200: #cfc7ff;
+  --color-secondary-300: #b7abff;
+  --color-secondary-400: #9f8fff;
+  --color-secondary-500: #7b61ff;
+  --color-secondary-600: #624dcc;
+  --color-secondary-700: #4a3a99;
+  --color-secondary-800: #312666;
+  --color-secondary-900: #191333;
+
+  /* Data colors */
+  --color-positive: #00ff88;
+  --color-positive-dark: #00cc6a;
+  --color-negative: #ff3366;
+  --color-negative-dark: #cc2952;
+  --color-neutral: #8b8b9a;
+
+  /* Chart colors */
+  --color-chart-cyan: #00f0ff;
+  --color-chart-purple: #7b61ff;
+  --color-chart-green: #00ff88;
+  --color-chart-pink: #ff3366;
+  --color-chart-yellow: #ffcc00;
+  --color-chart-orange: #ff8800;
+
+  /* Text colors */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a0a0b0;
+  --color-text-muted: #6b6b7a;
+
+  /* Border */
+  --color-border: #2a2a3a;
+
+  /* Typography */
+  --font-family-sans: 'Inter', system-ui, sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-family-display: 'Orbitron', sans-serif;
+
+  /* Animations */
+  --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+  --animate-gradient-shift: gradient-shift 3s ease infinite;
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-slide-up: slide-up 0.3s ease-out;
+
+  /* Box shadows for glow effects */
+  --shadow-glow-cyan: 0 0 20px rgba(0, 240, 255, 0.3), 0 0 40px rgba(0, 240, 255, 0.1);
+  --shadow-glow-green: 0 0 20px rgba(0, 255, 136, 0.3), 0 0 40px rgba(0, 255, 136, 0.1);
+  --shadow-glow-red: 0 0 20px rgba(255, 51, 102, 0.3), 0 0 40px rgba(255, 51, 102, 0.1);
+  --shadow-glow-purple: 0 0 20px rgba(123, 97, 255, 0.3), 0 0 40px rgba(123, 97, 255, 0.1);
+}
+
+/* Keyframe animations */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(0, 240, 255, 0.5);
+  }
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slide-up {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ===========================================
+   Base Styles
+   =========================================== */
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-sans);
+}
+
+/* ===========================================
+   Custom Utility Classes
+   =========================================== */
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.glow-green {
+  box-shadow: var(--shadow-glow-green);
+}
+
+.glow-red {
+  box-shadow: var(--shadow-glow-red);
+}
+
+.glow-purple {
+  box-shadow: var(--shadow-glow-purple);
+}
+
+/* Grid background pattern */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Scanline overlay effect */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.1) 0px,
+    rgba(0, 0, 0, 0.1) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+}
+
+/* Number display font */
+.font-mono-numbers {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Display font */
+.font-display {
+  font-family: var(--font-family-display);
+}
+
+/* Text gradient */
+.text-gradient {
+  background: linear-gradient(to right, var(--color-primary), var(--color-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Animated border gradient */
+.border-gradient-animated {
+  background: linear-gradient(90deg, #00f0ff, #7b61ff, #00f0ff);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+/* Glassmorphism effect */
+.glass {
+  background-color: rgba(18, 18, 26, 0.8);
+  backdrop-filter: blur(12px);
+}
+
+/* ===========================================
+   Scrollbar Styling
+   =========================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 240, 255, 0.5);
+}
+
+/* ===========================================
+   Animation Delays
+   =========================================== */
+.animation-delay-100 { animation-delay: 100ms; }
+.animation-delay-200 { animation-delay: 200ms; }
+.animation-delay-300 { animation-delay: 300ms; }
+.animation-delay-400 { animation-delay: 400ms; }
+.animation-delay-500 { animation-delay: 500ms; }
