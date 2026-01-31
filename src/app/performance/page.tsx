@@ -32,6 +32,12 @@ export default async function PerformancePage() {
                 Performance
               </Link>
               <Link
+                href="/paper-trading"
+                className="text-text-secondary hover:text-primary transition-colors"
+              >
+                Paper Trading
+              </Link>
+              <Link
                 href="/backtest"
                 className="text-text-secondary hover:text-primary transition-colors"
               >
