@@ -449,7 +449,7 @@ async function fetchSubreddit(
     const post = child.data;
 
     // Skip posts with certain flairs based on subreddit config
-    if (post.link_flair_text && config.skipFlairs.includes(post.link_flair_text)) {
+    if (post.link_flair_text && (config.skipFlairs as readonly string[]).includes(post.link_flair_text)) {
       continue;
     }
 
