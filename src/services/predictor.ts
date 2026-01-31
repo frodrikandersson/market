@@ -13,6 +13,7 @@
 
 import { db } from '@/lib/db';
 import { stockPriceService } from './stock-price';
+import { discord } from '@/lib/discord';
 import type { PredictionDirection, ModelType, Sentiment } from '@/types';
 
 // ===========================================
@@ -78,6 +79,7 @@ const HYPE_WEIGHTS = {
 
 // Confidence thresholds
 const MIN_CONFIDENCE = 0.3;
+const HIGH_CONFIDENCE_THRESHOLD = 0.7; // Send Discord alerts for predictions above this
 const MAX_CONFIDENCE = 0.95;
 
 // ===========================================
@@ -353,6 +355,17 @@ export async function runDailyPredictions(): Promise<RunPredictionsResult> {
     errors: [],
   };
 
+  // Collect high-confidence predictions for Discord alerts
+  const highConfidencePredictions: Array<{
+    ticker: string;
+    companyName: string;
+    modelType: 'fundamentals' | 'hype';
+    direction: 'up' | 'down';
+    confidence: number;
+    newsImpactScore?: number;
+    socialImpactScore?: number;
+  }> = [];
+
   // Get companies that have recent news impacts
   const cutoff = new Date();
   cutoff.setHours(cutoff.getHours() - 48); // Look at last 48 hours
@@ -371,7 +384,7 @@ export async function runDailyPredictions(): Promise<RunPredictionsResult> {
       id: { in: companyIds },
       isActive: true,
     },
-    select: { id: true, ticker: true },
+    select: { id: true, ticker: true, name: true },
   });
 
   console.log(`[Predictor] Running predictions for ${companies.length} companies`);
@@ -386,6 +399,18 @@ export async function runDailyPredictions(): Promise<RunPredictionsResult> {
         console.log(
           `[Predictor] ${company.ticker} Fundamentals: ${fundsPrediction.direction.toUpperCase()} (${(fundsPrediction.confidence * 100).toFixed(0)}%)`
         );
+
+        // Track high-confidence predictions for Discord
+        if (fundsPrediction.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
+          highConfidencePredictions.push({
+            ticker: company.ticker,
+            companyName: company.name,
+            modelType: 'fundamentals',
+            direction: fundsPrediction.direction as 'up' | 'down',
+            confidence: fundsPrediction.confidence,
+            newsImpactScore: fundsPrediction.newsImpactScore ?? undefined,
+          });
+        }
       }
     } catch (error) {
       const msg = `${company.ticker} fundamentals: ${error}`;
@@ -401,6 +426,18 @@ export async function runDailyPredictions(): Promise<RunPredictionsResult> {
         console.log(
           `[Predictor] ${company.ticker} Hype: ${hypePrediction.direction.toUpperCase()} (${(hypePrediction.confidence * 100).toFixed(0)}%)`
         );
+
+        // Track high-confidence predictions for Discord
+        if (hypePrediction.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
+          highConfidencePredictions.push({
+            ticker: company.ticker,
+            companyName: company.name,
+            modelType: 'hype',
+            direction: hypePrediction.direction as 'up' | 'down',
+            confidence: hypePrediction.confidence,
+            socialImpactScore: hypePrediction.socialImpactScore ?? undefined,
+          });
+        }
       }
     } catch (error) {
       const msg = `${company.ticker} hype: ${error}`;
@@ -411,6 +448,16 @@ export async function runDailyPredictions(): Promise<RunPredictionsResult> {
   console.log(
     `[Predictor] Generated ${result.fundamentalsPredictions} fundamentals, ${result.hypePredictions} hype predictions`
   );
+
+  // Send Discord notifications for high-confidence predictions
+  if (highConfidencePredictions.length > 0 && discord.isConfigured()) {
+    console.log(`[Predictor] Sending ${highConfidencePredictions.length} high-confidence alerts to Discord`);
+    try {
+      await discord.sendPredictionBatch(highConfidencePredictions);
+    } catch (error) {
+      console.error('[Predictor] Failed to send Discord notifications:', error);
+    }
+  }
 
   return result;
 }

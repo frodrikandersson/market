@@ -1,6 +1,7 @@
 import { Activity, BarChart3, TrendingUp, Award, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { performanceData } from '@/services/performance-data';
+import { AccuracyChart, CalibrationChart, ModelComparisonChart } from '@/components/AccuracyChart';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,102 +92,37 @@ export default async function PerformancePage() {
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Accuracy Over Time */}
+          {/* Accuracy Over Time - Line Chart */}
           <div className="bg-surface rounded-lg border border-border p-6">
-            <h2 className="text-xl font-semibold text-text-primary mb-4">Accuracy Over Time</h2>
-            {data.accuracyOverTime.length > 0 ? (
-              <div className="space-y-2">
-                {data.accuracyOverTime.slice(-10).map((day) => (
-                  <div key={day.date} className="flex items-center gap-4">
-                    <span className="text-xs text-text-muted w-20 font-mono-numbers">
-                      {new Date(day.date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </span>
-                    <div className="flex-1 flex items-center gap-2">
-                      <div className="flex-1 h-4 bg-background rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full"
-                          style={{ width: `${day.fundamentals}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-mono-numbers text-primary w-12">
-                        {day.fundamentals}%
-                      </span>
-                    </div>
-                    <div className="flex-1 flex items-center gap-2">
-                      <div className="flex-1 h-4 bg-background rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-secondary rounded-full"
-                          style={{ width: `${day.hype}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-mono-numbers text-secondary w-12">
-                        {day.hype}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-border">
-                  <span className="text-xs text-text-muted w-20">Legend:</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-primary rounded" />
-                    <span className="text-xs text-text-secondary">Fundamentals</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-secondary rounded" />
-                    <span className="text-xs text-text-secondary">Hype</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-text-muted text-sm">No prediction history yet</p>
-            )}
+            <AccuracyChart
+              data={data.accuracyOverTime}
+              title="Accuracy Over Time"
+              showArea={true}
+            />
           </div>
 
-          {/* Accuracy by Confidence */}
+          {/* Confidence Calibration - Line Chart */}
           <div className="bg-surface rounded-lg border border-border p-6">
-            <h2 className="text-xl font-semibold text-text-primary mb-4">Accuracy by Confidence</h2>
-            <p className="text-xs text-text-muted mb-4">
-              Higher confidence should mean higher accuracy (calibration)
-            </p>
-            <div className="space-y-4">
-              {data.accuracyByConfidence.map((bucket) => (
-                <div key={bucket.bucket} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-text-secondary">{bucket.bucket}</span>
-                    <div className="flex gap-4">
-                      <span className="text-primary font-mono-numbers">
-                        F: {bucket.fundamentals.accuracy.toFixed(0)}%
-                        <span className="text-text-muted text-xs ml-1">
-                          ({bucket.fundamentals.total})
-                        </span>
-                      </span>
-                      <span className="text-secondary font-mono-numbers">
-                        H: {bucket.hype.accuracy.toFixed(0)}%
-                        <span className="text-text-muted text-xs ml-1">({bucket.hype.total})</span>
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="flex-1 h-2 bg-background rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full"
-                        style={{ width: `${bucket.fundamentals.accuracy}%` }}
-                      />
-                    </div>
-                    <div className="flex-1 h-2 bg-background rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-secondary rounded-full"
-                        style={{ width: `${bucket.hype.accuracy}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CalibrationChart
+              data={data.accuracyByConfidence.map((bucket) => ({
+                bucket: bucket.bucket,
+                expectedAccuracy: (bucket.range[0] + bucket.range[1]) / 2 * 100,
+                fundamentalsAccuracy: bucket.fundamentals.accuracy,
+                hypeAccuracy: bucket.hype.accuracy,
+                fundamentalsCount: bucket.fundamentals.total,
+                hypeCount: bucket.hype.total,
+              }))}
+            />
           </div>
+        </div>
+
+        {/* Model Showdown */}
+        <div className="bg-surface rounded-lg border border-border p-6 mb-8">
+          <ModelComparisonChart
+            fundamentalsWins={data.modelShowdown.fundamentalsWins}
+            hypeWins={data.modelShowdown.hypeWins}
+            ties={data.modelShowdown.ties}
+          />
         </div>
 
         {/* Accuracy by Sector */}

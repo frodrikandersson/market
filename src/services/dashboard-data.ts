@@ -25,6 +25,13 @@ export interface DashboardStats {
   eventsToday: number;
 }
 
+export interface DataSource {
+  type: 'news' | 'reddit';
+  name: string;
+  sentiment: Sentiment;
+  count: number;
+}
+
 export interface StockPrediction {
   ticker: string;
   name: string;
@@ -36,7 +43,9 @@ export interface StockPrediction {
   hype: { direction: 'up' | 'down'; confidence: number } | null;
   wasCorrect: boolean | null;
   newsImpactScore: number;
+  socialImpactScore: number;
   sentiment: Sentiment;
+  dataSources: DataSource[];
 }
 
 export interface NewsEventItem {
@@ -51,10 +60,26 @@ export interface NewsEventItem {
   affectedTickers: string[];
 }
 
+export interface RedditSentiment {
+  overall: number; // -1 to 1 scale
+  bullishCount: number;
+  bearishCount: number;
+  neutralCount: number;
+  totalPosts: number;
+  bySubreddit: {
+    name: string;
+    sentiment: number;
+    postCount: number;
+  }[];
+  topBullishTickers: { ticker: string; mentions: number }[];
+  topBearishTickers: { ticker: string; mentions: number }[];
+}
+
 export interface DashboardData {
   stats: DashboardStats;
   predictions: StockPrediction[];
   newsEvents: NewsEventItem[];
+  redditSentiment: RedditSentiment;
   lastUpdated: Date;
 }
 
@@ -142,7 +167,7 @@ export async function getStats(): Promise<DashboardStats> {
  * Get stock predictions with real-time prices
  */
 export async function getStockPredictions(limit: number = 8): Promise<StockPrediction[]> {
-  // Get companies with recent news impacts
+  // Get companies with recent news impacts and social mentions
   const companiesWithImpacts = await db.company.findMany({
     where: { isActive: true },
     take: limit,
@@ -150,6 +175,17 @@ export async function getStockPredictions(limit: number = 8): Promise<StockPredi
       newsImpacts: {
         orderBy: { createdAt: 'desc' },
         take: 5,
+      },
+      socialMentions: {
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        include: {
+          post: {
+            include: {
+              account: { select: { platform: true, handle: true, name: true } },
+            },
+          },
+        },
       },
       predictions: {
         orderBy: { predictionDate: 'desc' },
@@ -174,6 +210,50 @@ export async function getStockPredictions(limit: number = 8): Promise<StockPredi
       const totalImpact = company.newsImpacts.reduce((sum, i) => sum + i.impactScore, 0);
       const avgImpact =
         company.newsImpacts.length > 0 ? totalImpact / company.newsImpacts.length : 0;
+
+      // Calculate social impact
+      const socialMentions = company.socialMentions || [];
+      const socialImpact = socialMentions.reduce((sum, m) => {
+        const sentimentValue = m.sentiment === 'positive' ? 1 : m.sentiment === 'negative' ? -1 : 0;
+        return sum + sentimentValue * m.confidence;
+      }, 0);
+      const avgSocialImpact = socialMentions.length > 0 ? socialImpact / socialMentions.length : 0;
+
+      // Build data sources
+      const dataSources: DataSource[] = [];
+
+      if (company.newsImpacts.length > 0) {
+        const newsSentiments = company.newsImpacts.map((i) => i.sentiment);
+        const posCount = newsSentiments.filter((s) => s === 'positive').length;
+        const negCount = newsSentiments.filter((s) => s === 'negative').length;
+        dataSources.push({
+          type: 'news',
+          name: 'News',
+          sentiment: posCount > negCount ? 'positive' : negCount > posCount ? 'negative' : 'neutral',
+          count: company.newsImpacts.length,
+        });
+      }
+
+      // Group social mentions by subreddit
+      const subredditMentions = new Map<string, { positive: number; negative: number; neutral: number }>();
+      for (const mention of socialMentions) {
+        const subreddit = (mention.post.account.handle as string) || 'reddit';
+        const current = subredditMentions.get(subreddit) || { positive: 0, negative: 0, neutral: 0 };
+        if (mention.sentiment === 'positive') current.positive++;
+        else if (mention.sentiment === 'negative') current.negative++;
+        else current.neutral++;
+        subredditMentions.set(subreddit, current);
+      }
+
+      for (const [subreddit, counts] of subredditMentions) {
+        const total = counts.positive + counts.negative + counts.neutral;
+        dataSources.push({
+          type: 'reddit',
+          name: `r/${subreddit}`,
+          sentiment: counts.positive > counts.negative ? 'positive' : counts.negative > counts.positive ? 'negative' : 'neutral',
+          count: total,
+        });
+      }
 
       // Get latest predictions
       const fundamentalsPred = company.predictions.find(
@@ -202,7 +282,9 @@ export async function getStockPredictions(limit: number = 8): Promise<StockPredi
           : null,
         wasCorrect: fundamentalsPred?.wasCorrect ?? null,
         newsImpactScore: avgImpact,
+        socialImpactScore: avgSocialImpact,
         sentiment: scoreToSentiment(avgImpact),
+        dataSources,
       });
 
       // Small delay to avoid rate limits
@@ -221,7 +303,9 @@ export async function getStockPredictions(limit: number = 8): Promise<StockPredi
         hype: null,
         wasCorrect: null,
         newsImpactScore: 0,
+        socialImpactScore: 0,
         sentiment: 'neutral',
+        dataSources: [],
       });
     }
   }
@@ -250,6 +334,17 @@ export async function getCompaniesWithImpacts(
         orderBy: { createdAt: 'desc' },
         take: 5,
       },
+      socialMentions: {
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        include: {
+          post: {
+            include: {
+              account: { select: { platform: true, handle: true, name: true } },
+            },
+          },
+        },
+      },
     },
   });
 
@@ -263,6 +358,50 @@ export async function getCompaniesWithImpacts(
         ? company.newsImpacts.reduce((sum, i) => sum + i.impactScore, 0) /
           company.newsImpacts.length
         : 0;
+
+    // Calculate social impact
+    const socialMentions = company.socialMentions || [];
+    const socialImpact = socialMentions.reduce((sum, m) => {
+      const sentimentValue = m.sentiment === 'positive' ? 1 : m.sentiment === 'negative' ? -1 : 0;
+      return sum + sentimentValue * m.confidence;
+    }, 0);
+    const avgSocialImpact = socialMentions.length > 0 ? socialImpact / socialMentions.length : 0;
+
+    // Build data sources
+    const dataSources: DataSource[] = [];
+
+    if (company.newsImpacts.length > 0) {
+      const newsSentiments = company.newsImpacts.map((i) => i.sentiment);
+      const posCount = newsSentiments.filter((s) => s === 'positive').length;
+      const negCount = newsSentiments.filter((s) => s === 'negative').length;
+      dataSources.push({
+        type: 'news',
+        name: 'News',
+        sentiment: posCount > negCount ? 'positive' : negCount > posCount ? 'negative' : 'neutral',
+        count: company.newsImpacts.length,
+      });
+    }
+
+    // Group social mentions by subreddit
+    const subredditMentions = new Map<string, { positive: number; negative: number; neutral: number }>();
+    for (const mention of socialMentions) {
+      const subreddit = (mention.post.account.handle as string) || 'reddit';
+      const current = subredditMentions.get(subreddit) || { positive: 0, negative: 0, neutral: 0 };
+      if (mention.sentiment === 'positive') current.positive++;
+      else if (mention.sentiment === 'negative') current.negative++;
+      else current.neutral++;
+      subredditMentions.set(subreddit, current);
+    }
+
+    for (const [subreddit, counts] of subredditMentions) {
+      const total = counts.positive + counts.negative + counts.neutral;
+      dataSources.push({
+        type: 'reddit',
+        name: `r/${subreddit}`,
+        sentiment: counts.positive > counts.negative ? 'positive' : counts.negative > counts.positive ? 'negative' : 'neutral',
+        count: total,
+      });
+    }
 
     // Get latest predictions by model type
     const fundamentalsPred = company.predictions.find(
@@ -291,7 +430,9 @@ export async function getCompaniesWithImpacts(
         : null,
       wasCorrect: fundamentalsPred?.wasCorrect ?? null,
       newsImpactScore: avgImpact,
+      socialImpactScore: avgSocialImpact,
       sentiment: scoreToSentiment(avgImpact),
+      dataSources,
     });
   }
 
@@ -382,16 +523,18 @@ export async function getRecentArticles(limit: number = 10): Promise<NewsEventIt
  */
 export async function getDashboardData(): Promise<DashboardData> {
   try {
-    const [stats, predictions, newsEvents] = await Promise.all([
+    const [stats, predictions, newsEvents, redditSentiment] = await Promise.all([
       getStats(),
       getCompaniesWithImpacts(8),
       getRecentArticles(5),
+      getRedditSentiment(24),
     ]);
 
     return {
       stats,
       predictions,
       newsEvents,
+      redditSentiment,
       lastUpdated: new Date(),
     };
   } catch (error) {
@@ -408,9 +551,129 @@ export async function getDashboardData(): Promise<DashboardData> {
       },
       predictions: [],
       newsEvents: [],
+      redditSentiment: {
+        overall: 0,
+        bullishCount: 0,
+        bearishCount: 0,
+        neutralCount: 0,
+        totalPosts: 0,
+        bySubreddit: [],
+        topBullishTickers: [],
+        topBearishTickers: [],
+      },
       lastUpdated: new Date(),
     };
   }
+}
+
+/**
+ * Get aggregated Reddit sentiment across all subreddits
+ */
+export async function getRedditSentiment(hoursBack: number = 24): Promise<RedditSentiment> {
+  const cutoff = new Date();
+  cutoff.setHours(cutoff.getHours() - hoursBack);
+
+  // Get all Reddit posts from the last 24 hours
+  const posts = await db.socialPost.findMany({
+    where: {
+      publishedAt: { gte: cutoff },
+      account: {
+        platform: 'reddit',
+      },
+    },
+    include: {
+      account: { select: { handle: true, name: true } },
+      mentions: {
+        include: {
+          company: { select: { ticker: true } },
+        },
+      },
+    },
+    orderBy: { publishedAt: 'desc' },
+  });
+
+  // Aggregate by sentiment
+  let bullishCount = 0;
+  let bearishCount = 0;
+  let neutralCount = 0;
+
+  // Track by subreddit
+  const subredditStats = new Map<string, { bullish: number; bearish: number; neutral: number }>();
+
+  // Track ticker mentions by sentiment
+  const bullishTickers = new Map<string, number>();
+  const bearishTickers = new Map<string, number>();
+
+  for (const post of posts) {
+    const subreddit = post.account.handle;
+
+    // Initialize subreddit stats if needed
+    if (!subredditStats.has(subreddit)) {
+      subredditStats.set(subreddit, { bullish: 0, bearish: 0, neutral: 0 });
+    }
+    const stats = subredditStats.get(subreddit)!;
+
+    // Count by sentiment
+    if (post.sentiment === 'positive') {
+      bullishCount++;
+      stats.bullish++;
+      // Track tickers mentioned in bullish posts
+      for (const mention of post.mentions) {
+        const current = bullishTickers.get(mention.company.ticker) || 0;
+        bullishTickers.set(mention.company.ticker, current + 1);
+      }
+    } else if (post.sentiment === 'negative') {
+      bearishCount++;
+      stats.bearish++;
+      // Track tickers mentioned in bearish posts
+      for (const mention of post.mentions) {
+        const current = bearishTickers.get(mention.company.ticker) || 0;
+        bearishTickers.set(mention.company.ticker, current + 1);
+      }
+    } else {
+      neutralCount++;
+      stats.neutral++;
+    }
+  }
+
+  const totalPosts = posts.length;
+
+  // Calculate overall sentiment (-1 to 1)
+  const overall = totalPosts > 0
+    ? (bullishCount - bearishCount) / totalPosts
+    : 0;
+
+  // Build subreddit breakdown
+  const bySubreddit = Array.from(subredditStats.entries()).map(([name, stats]) => {
+    const total = stats.bullish + stats.bearish + stats.neutral;
+    return {
+      name: `r/${name}`,
+      sentiment: total > 0 ? (stats.bullish - stats.bearish) / total : 0,
+      postCount: total,
+    };
+  }).sort((a, b) => b.postCount - a.postCount);
+
+  // Get top bullish/bearish tickers
+  const topBullishTickers = Array.from(bullishTickers.entries())
+    .map(([ticker, mentions]) => ({ ticker, mentions }))
+    .sort((a, b) => b.mentions - a.mentions)
+    .slice(0, 5);
+
+  const topBearishTickers = Array.from(bearishTickers.entries())
+    .map(([ticker, mentions]) => ({ ticker, mentions }))
+    .sort((a, b) => b.mentions - a.mentions)
+    .slice(0, 5);
+
+  return {
+    overall,
+    bullishCount,
+    bearishCount,
+    neutralCount,
+    totalPosts,
+    bySubreddit,
+    topBullishTickers,
+    topBearishTickers,
+  };
 }
 
 // Export as namespace
@@ -420,5 +683,6 @@ export const dashboardData = {
   getCompaniesWithImpacts,
   getNewsEvents,
   getRecentArticles,
+  getRedditSentiment,
   getDashboardData,
 };

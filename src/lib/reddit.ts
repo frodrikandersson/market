@@ -1,16 +1,32 @@
 /**
  * Reddit API Client
  * =================
- * Fetches posts from r/wallstreetbets for the Hype Model.
+ * Fetches posts from finance-related subreddits for the Hype Model.
  * Uses Reddit's public JSON API (no OAuth required for read-only).
+ *
+ * Supported subreddits:
+ * - r/wallstreetbets (retail sentiment, meme stocks)
+ * - r/stocks (general stock discussion)
+ * - r/investing (long-term investing)
+ * - r/options (options trading)
  *
  * Usage:
  *   import { reddit } from '@/lib/reddit';
- *   const posts = await reddit.fetchWallStreetBets();
+ *   const posts = await reddit.fetchAllSubreddits();
  */
 
+// Subreddit configurations with weights
+export const SUBREDDIT_CONFIG = {
+  wallstreetbets: { name: 'r/WallStreetBets', weight: 0.8, skipFlairs: ['Daily Discussion', 'Weekend Discussion'] },
+  stocks: { name: 'r/stocks', weight: 0.7, skipFlairs: ['Rate My Portfolio', 'Advice Request'] },
+  investing: { name: 'r/investing', weight: 0.6, skipFlairs: ['Daily Discussion'] },
+  options: { name: 'r/options', weight: 0.7, skipFlairs: ['Daily Discussion'] },
+} as const;
+
+export type SubredditName = keyof typeof SUBREDDIT_CONFIG;
+
 // Types for Reddit API responses
-interface RedditPost {
+interface RedditAPIPost {
   id: string;
   title: string;
   selftext: string;
@@ -25,20 +41,21 @@ interface RedditPost {
   url: string;
 }
 
-interface RedditListing {
+interface RedditAPIListing {
   kind: string;
   data: {
     after: string | null;
     before: string | null;
     children: Array<{
       kind: string;
-      data: RedditPost;
+      data: RedditAPIPost;
     }>;
   };
 }
 
-export interface WSBPost {
+export interface RedditPost {
   id: string;
+  subreddit: SubredditName;
   title: string;
   content: string;
   author: string;
@@ -51,6 +68,9 @@ export interface WSBPost {
   tickers: string[];
   sentiment: 'positive' | 'negative' | 'neutral';
 }
+
+// Alias for backwards compatibility
+export type WSBPost = RedditPost;
 
 // Common WSB terminology for sentiment detection
 const WSB_BULLISH_TERMS = [
@@ -398,15 +418,17 @@ function detectSentiment(text: string): 'positive' | 'negative' | 'neutral' {
 }
 
 /**
- * Fetch posts from r/wallstreetbets
+ * Fetch posts from a subreddit
  */
-async function fetchWallStreetBets(
+async function fetchSubreddit(
+  subreddit: SubredditName,
   sortBy: 'hot' | 'new' | 'top' | 'rising' = 'hot',
   limit: number = 50
-): Promise<WSBPost[]> {
-  const url = `https://www.reddit.com/r/wallstreetbets/${sortBy}.json?limit=${limit}&raw_json=1`;
+): Promise<RedditPost[]> {
+  const config = SUBREDDIT_CONFIG[subreddit];
+  const url = `https://www.reddit.com/r/${subreddit}/${sortBy}.json?limit=${limit}&raw_json=1`;
 
-  console.log(`[Reddit] Fetching r/wallstreetbets/${sortBy}...`);
+  console.log(`[Reddit] Fetching r/${subreddit}/${sortBy}...`);
 
   const response = await fetch(url, {
     headers: {
@@ -419,15 +441,15 @@ async function fetchWallStreetBets(
     throw new Error(`Reddit API error: ${response.status} ${response.statusText}`);
   }
 
-  const data: RedditListing = await response.json();
+  const data: RedditAPIListing = await response.json();
 
-  const posts: WSBPost[] = [];
+  const posts: RedditPost[] = [];
 
   for (const child of data.data.children) {
     const post = child.data;
 
-    // Skip stickied/announcement posts
-    if (post.link_flair_text === 'Daily Discussion' || post.link_flair_text === 'Weekend Discussion') {
+    // Skip posts with certain flairs based on subreddit config
+    if (post.link_flair_text && config.skipFlairs.includes(post.link_flair_text)) {
       continue;
     }
 
@@ -445,13 +467,15 @@ async function fetchWallStreetBets(
     // Detect sentiment
     let sentiment = detectSentiment(fullText);
 
-    // Boost positive sentiment for highly upvoted posts
-    if (post.score > 1000 && sentiment === 'neutral') {
-      sentiment = 'positive'; // WSB upvotes tend to indicate bullishness
+    // Boost positive sentiment for highly upvoted posts (varies by subreddit)
+    const upvoteThreshold = subreddit === 'wallstreetbets' ? 1000 : 500;
+    if (post.score > upvoteThreshold && sentiment === 'neutral') {
+      sentiment = 'positive';
     }
 
     posts.push({
-      id: post.id,
+      id: `${subreddit}_${post.id}`, // Prefix with subreddit for uniqueness
+      subreddit,
       title: post.title,
       content: post.selftext?.substring(0, 2000) || '', // Limit content length
       author: post.author,
@@ -466,24 +490,23 @@ async function fetchWallStreetBets(
     });
   }
 
-  console.log(`[Reddit] Found ${posts.length} posts with ticker mentions from ${data.data.children.length} total`);
+  console.log(`[Reddit] r/${subreddit}: Found ${posts.length} posts with ticker mentions from ${data.data.children.length} total`);
 
   return posts;
 }
 
 /**
- * Fetch from multiple sort types for better coverage
+ * Fetch from a single subreddit with multiple sort types
  */
-async function fetchAllWSB(limit: number = 25): Promise<WSBPost[]> {
-  const allPosts: WSBPost[] = [];
+async function fetchFromSubreddit(subreddit: SubredditName, limit: number = 25): Promise<RedditPost[]> {
+  const allPosts: RedditPost[] = [];
   const seenIds = new Set<string>();
 
-  // Fetch from hot and new for a mix of popular and recent content
-  const sortTypes: Array<'hot' | 'new' | 'rising'> = ['hot', 'new', 'rising'];
+  const sortTypes: Array<'hot' | 'new' | 'rising'> = ['hot', 'new'];
 
   for (const sortType of sortTypes) {
     try {
-      const posts = await fetchWallStreetBets(sortType, limit);
+      const posts = await fetchSubreddit(subreddit, sortType, limit);
 
       for (const post of posts) {
         if (!seenIds.has(post.id)) {
@@ -495,13 +518,44 @@ async function fetchAllWSB(limit: number = 25): Promise<WSBPost[]> {
       // Rate limit between requests
       await new Promise((resolve) => setTimeout(resolve, 1000));
     } catch (error) {
-      console.error(`[Reddit] Error fetching ${sortType}:`, error);
+      console.error(`[Reddit] Error fetching r/${subreddit}/${sortType}:`, error);
     }
   }
 
-  console.log(`[Reddit] Total unique posts with tickers: ${allPosts.length}`);
+  return allPosts;
+}
+
+/**
+ * Fetch from all configured subreddits
+ */
+async function fetchAllSubreddits(limit: number = 20): Promise<RedditPost[]> {
+  const allPosts: RedditPost[] = [];
+  const subreddits = Object.keys(SUBREDDIT_CONFIG) as SubredditName[];
+
+  console.log(`[Reddit] Fetching from ${subreddits.length} subreddits...`);
+
+  for (const subreddit of subreddits) {
+    try {
+      const posts = await fetchFromSubreddit(subreddit, limit);
+      allPosts.push(...posts);
+
+      // Rate limit between subreddits
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    } catch (error) {
+      console.error(`[Reddit] Error fetching r/${subreddit}:`, error);
+    }
+  }
+
+  console.log(`[Reddit] Total posts from all subreddits: ${allPosts.length}`);
 
   return allPosts;
+}
+
+/**
+ * Backwards compatible: Fetch from WSB only
+ */
+async function fetchAllWSB(limit: number = 25): Promise<RedditPost[]> {
+  return fetchFromSubreddit('wallstreetbets', limit);
 }
 
 /**
@@ -524,7 +578,7 @@ async function isAvailable(): Promise<boolean> {
  * Calculate engagement score for a post (0-1 normalized)
  * WSB engagement is different - high scores and comment counts matter
  */
-function calculateEngagement(post: WSBPost): number {
+function calculateEngagement(post: RedditPost): number {
   // Weights: upvotes matter most, then comments
   const scoreWeight = Math.min(1, post.score / 10000); // Cap at 10k
   const commentWeight = Math.min(1, post.commentCount / 1000); // Cap at 1k
@@ -534,12 +588,31 @@ function calculateEngagement(post: WSBPost): number {
   return scoreWeight * 0.5 + commentWeight * 0.3 + ratioWeight * 0.2;
 }
 
+/**
+ * Get subreddit display name
+ */
+function getSubredditName(subreddit: SubredditName): string {
+  return SUBREDDIT_CONFIG[subreddit].name;
+}
+
+/**
+ * Get subreddit weight for scoring
+ */
+function getSubredditWeight(subreddit: SubredditName): number {
+  return SUBREDDIT_CONFIG[subreddit].weight;
+}
+
 // Export as namespace
 export const reddit = {
-  fetchWallStreetBets,
-  fetchAllWSB,
+  fetchSubreddit,
+  fetchFromSubreddit,
+  fetchAllSubreddits,
+  fetchAllWSB, // Backwards compatible
   isAvailable,
   extractTickers,
   detectSentiment,
   calculateEngagement,
+  getSubredditName,
+  getSubredditWeight,
+  SUBREDDIT_CONFIG,
 };

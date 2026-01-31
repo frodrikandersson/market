@@ -53,6 +53,12 @@ export interface RecentPrediction {
   actualChange: number | null;
 }
 
+export interface ModelShowdown {
+  fundamentalsWins: number;
+  hypeWins: number;
+  ties: number;
+}
+
 export interface PerformanceData {
   overall: {
     fundamentals: ModelAccuracy;
@@ -68,6 +74,7 @@ export interface PerformanceData {
     fundamentalsBestStreak: number;
     hypeBestStreak: number;
   };
+  modelShowdown: ModelShowdown;
 }
 
 // ===========================================
@@ -369,7 +376,7 @@ export async function getStreaks(): Promise<{
  * Get full performance data
  */
 export async function getPerformanceData(): Promise<PerformanceData> {
-  const [overall, accuracyOverTime, accuracyByConfidence, accuracyBySector, recentPredictions, streaks] =
+  const [overall, accuracyOverTime, accuracyByConfidence, accuracyBySector, recentPredictions, streaks, modelShowdown] =
     await Promise.all([
       getOverallAccuracy(),
       getAccuracyOverTime(30),
@@ -377,6 +384,7 @@ export async function getPerformanceData(): Promise<PerformanceData> {
       getAccuracyBySector(),
       getRecentPredictions(500),
       getStreaks(),
+      getModelShowdown(),
     ]);
 
   return {
@@ -386,7 +394,67 @@ export async function getPerformanceData(): Promise<PerformanceData> {
     accuracyBySector,
     recentPredictions,
     streaks,
+    modelShowdown,
   };
+}
+
+/**
+ * Get head-to-head model comparison
+ * When both models predicted the same stock on the same day, which was right?
+ */
+export async function getModelShowdown(): Promise<{
+  fundamentalsWins: number;
+  hypeWins: number;
+  ties: number;
+}> {
+  // Get all predictions with results
+  const predictions = await db.prediction.findMany({
+    where: { wasCorrect: { not: null } },
+    select: {
+      companyId: true,
+      targetDate: true,
+      modelType: true,
+      wasCorrect: true,
+    },
+    orderBy: [{ companyId: 'asc' }, { targetDate: 'asc' }],
+  });
+
+  // Group by company and date
+  const grouped = new Map<string, { fundamentals?: boolean; hype?: boolean }>();
+
+  for (const pred of predictions) {
+    const key = `${pred.companyId}_${pred.targetDate.toISOString().split('T')[0]}`;
+    const current = grouped.get(key) || {};
+
+    if (pred.modelType === 'fundamentals') {
+      current.fundamentals = pred.wasCorrect ?? undefined;
+    } else if (pred.modelType === 'hype') {
+      current.hype = pred.wasCorrect ?? undefined;
+    }
+
+    grouped.set(key, current);
+  }
+
+  // Count wins
+  let fundamentalsWins = 0;
+  let hypeWins = 0;
+  let ties = 0;
+
+  for (const [, result] of grouped) {
+    // Only count when both models made predictions
+    if (result.fundamentals !== undefined && result.hype !== undefined) {
+      if (result.fundamentals && !result.hype) {
+        fundamentalsWins++;
+      } else if (!result.fundamentals && result.hype) {
+        hypeWins++;
+      } else {
+        // Both right or both wrong
+        ties++;
+      }
+    }
+  }
+
+  return { fundamentalsWins, hypeWins, ties };
 }
 
 // Export as namespace
@@ -397,5 +465,6 @@ export const performanceData = {
   getAccuracyBySector,
   getRecentPredictions,
   getStreaks,
+  getModelShowdown,
   getPerformanceData,
 };

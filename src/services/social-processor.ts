@@ -153,7 +153,7 @@ export async function fetchRSSPosts(): Promise<{
 }
 
 /**
- * Fetch posts from Reddit r/wallstreetbets
+ * Fetch posts from all Reddit finance subreddits
  */
 export async function fetchRedditPosts(): Promise<{
   postsFound: number;
@@ -176,37 +176,48 @@ export async function fetchRedditPosts(): Promise<{
   });
   const tickerToCompany = new Map(companies.map((c) => [c.ticker, c]));
 
-  console.log(`[Reddit] Fetching r/wallstreetbets posts...`);
+  console.log(`[Reddit] Fetching from all finance subreddits...`);
 
-  // Get or create the WSB account entry
-  let wsbAccount = await db.influentialAccount.findFirst({
-    where: { platform: 'reddit', handle: 'wallstreetbets' },
-  });
+  // Get or create accounts for each subreddit
+  const subredditAccounts = new Map<string, { id: string; weight: number }>();
+  const subreddits = Object.keys(reddit.SUBREDDIT_CONFIG) as Array<keyof typeof reddit.SUBREDDIT_CONFIG>;
 
-  if (!wsbAccount) {
-    wsbAccount = await db.influentialAccount.create({
-      data: {
-        platform: 'reddit',
-        handle: 'wallstreetbets',
-        name: 'r/WallStreetBets',
-        weight: 0.8, // High weight - WSB has significant market influence
-        isActive: true,
-      },
+  for (const subreddit of subreddits) {
+    const config = reddit.SUBREDDIT_CONFIG[subreddit];
+    let account = await db.influentialAccount.findFirst({
+      where: { platform: 'reddit', handle: subreddit },
     });
-    console.log(`[Reddit] Created WSB account entry`);
+
+    if (!account) {
+      account = await db.influentialAccount.create({
+        data: {
+          platform: 'reddit',
+          handle: subreddit,
+          name: config.name,
+          weight: config.weight,
+          isActive: true,
+        },
+      });
+      console.log(`[Reddit] Created account for ${config.name}`);
+    }
+
+    subredditAccounts.set(subreddit, { id: account.id, weight: account.weight });
   }
 
   try {
-    // Fetch posts from hot, new, and rising
-    const posts = await reddit.fetchAllWSB(25);
+    // Fetch posts from all subreddits
+    const posts = await reddit.fetchAllSubreddits(20);
     result.postsFound = posts.length;
 
     for (const post of posts) {
+      const accountInfo = subredditAccounts.get(post.subreddit);
+      if (!accountInfo) continue;
+
       // Check if post already exists
       const existing = await db.socialPost.findUnique({
         where: {
           accountId_externalId: {
-            accountId: wsbAccount.id,
+            accountId: accountInfo.id,
             externalId: post.id,
           },
         },
@@ -220,16 +231,17 @@ export async function fetchRedditPosts(): Promise<{
       // Save new post
       const savedPost = await db.socialPost.create({
         data: {
-          accountId: wsbAccount.id,
+          accountId: accountInfo.id,
           externalId: post.id,
           content: `${post.title}\n\n${post.content}`.substring(0, 5000),
           sentiment: post.sentiment,
-          impactScore: engagement * (post.sentiment === 'positive' ? 1 : post.sentiment === 'negative' ? -1 : 0),
+          impactScore: engagement * accountInfo.weight * (post.sentiment === 'positive' ? 1 : post.sentiment === 'negative' ? -1 : 0),
           metrics: {
             score: post.score,
             upvoteRatio: post.upvoteRatio,
             comments: post.commentCount,
             flair: post.flair,
+            subreddit: post.subreddit,
           },
           publishedAt: post.createdAt,
           processed: true, // Already analyzed during fetch
@@ -252,7 +264,7 @@ export async function fetchRedditPosts(): Promise<{
               postId: savedPost.id,
               companyId: company.id,
               sentiment: post.sentiment,
-              confidence: Math.min(0.9, 0.5 + engagement), // Higher engagement = higher confidence
+              confidence: Math.min(0.9, 0.5 + engagement * accountInfo.weight),
             },
             update: {},
           });

@@ -1,5 +1,7 @@
 import { TrendingUp, Activity, BarChart3, RefreshCw } from 'lucide-react';
 import { dashboardData } from '@/services/dashboard-data';
+import { RefreshButton } from '@/components/RefreshButton';
+import { RedditSentimentMeter } from '@/components/RedditSentimentMeter';
 import type { Sentiment } from '@/types';
 
 // Force dynamic rendering to always fetch fresh data
@@ -84,8 +86,11 @@ export default async function Home() {
               <h2 className="text-xl font-semibold text-text-primary">
                 Companies with Recent News
               </h2>
-              <div className="text-xs text-text-muted">
-                Updated: {data.lastUpdated.toISOString().slice(0, 16).replace('T', ' ')} UTC
+              <div className="flex items-center gap-4">
+                <div className="text-xs text-text-muted">
+                  Updated: {data.lastUpdated.toISOString().slice(0, 16).replace('T', ' ')} UTC
+                </div>
+                <RefreshButton />
               </div>
             </div>
 
@@ -149,6 +154,9 @@ export default async function Home() {
                 Based on {data.stats.totalPredictions} total predictions
               </p>
             </div>
+
+            {/* Reddit Sentiment Meter */}
+            <RedditSentimentMeter sentiment={data.redditSentiment} />
 
             {/* Latest News Events */}
             <div className="bg-surface rounded-lg border border-border p-6">
@@ -223,6 +231,13 @@ function StatCard({
   );
 }
 
+interface DataSource {
+  type: 'news' | 'reddit';
+  name: string;
+  sentiment: Sentiment;
+  count: number;
+}
+
 function StockCard({
   ticker,
   name,
@@ -231,6 +246,7 @@ function StockCard({
   wasCorrect,
   newsImpactScore,
   sentiment,
+  dataSources,
 }: {
   ticker: string;
   name: string;
@@ -243,6 +259,7 @@ function StockCard({
   wasCorrect: boolean | null;
   newsImpactScore: number;
   sentiment: Sentiment;
+  dataSources: DataSource[];
 }) {
   // Determine border color based on sentiment
   const borderClass =
@@ -266,7 +283,7 @@ function StockCard({
       </div>
 
       {/* News Impact Score */}
-      <div className="flex items-baseline gap-2 mb-4">
+      <div className="flex items-baseline gap-2 mb-3">
         <span className="text-text-muted text-sm">News Impact:</span>
         <span
           className={`text-lg font-bold font-mono-numbers ${
@@ -281,6 +298,33 @@ function StockCard({
           {newsImpactScore.toFixed(2)}
         </span>
       </div>
+
+      {/* Data Sources */}
+      {dataSources.length > 0 && (
+        <div className="mb-4">
+          <span className="text-text-muted text-xs block mb-1.5">SOURCES</span>
+          <div className="flex flex-wrap gap-1.5">
+            {dataSources.map((source) => (
+              <span
+                key={source.name}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
+                  source.sentiment === 'positive'
+                    ? 'bg-positive/10 text-positive border border-positive/20'
+                    : source.sentiment === 'negative'
+                      ? 'bg-negative/10 text-negative border border-negative/20'
+                      : 'bg-neutral/10 text-neutral border border-neutral/20'
+                }`}
+              >
+                {source.type === 'reddit' ? '🔴' : '📰'}{' '}
+                {source.name}
+                {source.count > 1 && (
+                  <span className="opacity-70">({source.count})</span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Dual Model Predictions */}
       <div className="grid grid-cols-2 gap-2 text-sm">
