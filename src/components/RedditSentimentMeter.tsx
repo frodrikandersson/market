@@ -33,19 +33,19 @@ export function RedditSentimentMeter({ sentiment }: RedditSentimentMeterProps) {
       {/* Gauge */}
       <div className="relative flex justify-center mb-4">
         <div className="relative w-48 h-24 overflow-hidden">
-          {/* Background arc */}
+          {/* Background arc - semicircle from left (fear) to right (greed) */}
           <div
             className="absolute inset-0 rounded-t-full"
             style={{
               background: `conic-gradient(
-                from 180deg,
+                from 270deg,
                 #ff3366 0deg,
-                #ff3366 45deg,
-                #ffcc00 45deg,
-                #ffcc00 90deg,
-                #8b8b9a 90deg,
-                #8b8b9a 135deg,
-                #00ff88 135deg,
+                #ff3366 36deg,
+                #ffcc00 36deg,
+                #ffcc00 72deg,
+                #8b8b9a 72deg,
+                #8b8b9a 108deg,
+                #00ff88 108deg,
                 #00ff88 180deg
               )`,
             }}

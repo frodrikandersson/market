@@ -1,10 +1,10 @@
 /**
  * Auto-Trader API
  * ================
- * Endpoints for the AI auto-trading system.
+ * Endpoints for the AI auto-trading system with multiple model portfolios.
  *
- * GET  - Get AI portfolio status
- * POST - Trigger auto-trade cycle
+ * GET  - Get all AI portfolio statuses
+ * POST - Trigger auto-trade cycle for all models
  */
 
 import { NextResponse } from 'next/server';
@@ -12,7 +12,7 @@ import { autoTrader } from '@/services/auto-trader';
 
 export async function GET() {
   try {
-    const status = await autoTrader.getStatus();
+    const status = await autoTrader.getAllStatus();
 
     return NextResponse.json({
       success: true,
@@ -37,7 +37,14 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      ...result,
+      totalTradesExecuted: result.totalTradesExecuted,
+      portfolios: result.portfolios.map(p => ({
+        modelType: p.modelType,
+        tradesExecuted: p.tradesExecuted,
+        buyOrders: p.buyOrders,
+        sellOrders: p.sellOrders,
+      })),
+      errors: result.errors,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

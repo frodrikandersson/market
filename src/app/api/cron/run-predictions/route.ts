@@ -114,10 +114,13 @@ export async function GET(request: NextRequest) {
     // Step 4: Execute auto-trades based on predictions
     console.log('\n=== Step 4: Running Auto-Trader ===');
     const autoTradeResult = await autoTrader.executeFromPredictions();
+    // Aggregate results from all portfolios
+    const totalBuyOrders = autoTradeResult.portfolios.reduce((sum, p) => sum + p.buyOrders, 0);
+    const totalSellOrders = autoTradeResult.portfolios.reduce((sum, p) => sum + p.sellOrders, 0);
     results.autoTrader = {
-      tradesExecuted: autoTradeResult.tradesExecuted,
-      buyOrders: autoTradeResult.buyOrders,
-      sellOrders: autoTradeResult.sellOrders,
+      tradesExecuted: autoTradeResult.totalTradesExecuted,
+      buyOrders: totalBuyOrders,
+      sellOrders: totalSellOrders,
       errors: autoTradeResult.errors,
     };
 
