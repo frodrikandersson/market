@@ -274,6 +274,20 @@ export async function getTodaysMarketNews(): Promise<NewsAPIArticle[]> {
   try {
     console.log('[YouTube] Fetching today\'s market news...');
 
+    // Quick quota check - fail fast if quota exceeded
+    const quotaCheck = await fetch(
+      `${YOUTUBE_BASE_URL}/search?part=snippet&q=test&maxResults=1&key=${YOUTUBE_API_KEY}`
+    );
+
+    if (!quotaCheck.ok) {
+      if (quotaCheck.status === 403) {
+        console.error('[YouTube] API quota exceeded - skipping fetch');
+      } else {
+        console.error(`[YouTube] API check failed with status ${quotaCheck.status}`);
+      }
+      return [];
+    }
+
     // Search for market-related content from past 24 hours
     const queries = [
       'stock market today',

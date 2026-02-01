@@ -179,30 +179,51 @@ export async function fetchRedditPosts(): Promise<{
 
   console.log(`[Reddit] Fetching from all finance subreddits...`);
 
-  // Get or create accounts for each subreddit
+  // Get or create accounts for each subreddit (OPTIMIZED: batch query)
   const subredditAccounts = new Map<string, { id: string; weight: number }>();
   const subreddits = Object.keys(reddit.SUBREDDIT_CONFIG) as Array<keyof typeof reddit.SUBREDDIT_CONFIG>;
 
-  for (const subreddit of subreddits) {
-    const config = reddit.SUBREDDIT_CONFIG[subreddit];
-    let account = await db.influentialAccount.findFirst({
-      where: { platform: 'reddit', handle: subreddit },
+  // Fetch all existing Reddit accounts in one query
+  const existingAccounts = await db.influentialAccount.findMany({
+    where: {
+      platform: 'reddit',
+      handle: { in: subreddits }
+    },
+    select: { id: true, handle: true, weight: true }
+  });
+
+  // Identify missing accounts
+  const existingHandles = new Set(existingAccounts.map(a => a.handle));
+  const missingSubreddits = subreddits.filter(s => !existingHandles.has(s));
+
+  // Bulk create missing accounts
+  if (missingSubreddits.length > 0) {
+    await db.influentialAccount.createMany({
+      data: missingSubreddits.map(subreddit => ({
+        platform: 'reddit',
+        handle: subreddit,
+        name: reddit.SUBREDDIT_CONFIG[subreddit].name,
+        weight: reddit.SUBREDDIT_CONFIG[subreddit].weight,
+        isActive: true,
+      })),
+      skipDuplicates: true,
     });
+    console.log(`[Reddit] Created ${missingSubreddits.length} new accounts`);
 
-    if (!account) {
-      account = await db.influentialAccount.create({
-        data: {
-          platform: 'reddit',
-          handle: subreddit,
-          name: config.name,
-          weight: config.weight,
-          isActive: true,
-        },
-      });
-      console.log(`[Reddit] Created account for ${config.name}`);
-    }
+    // Fetch the newly created accounts
+    const newAccounts = await db.influentialAccount.findMany({
+      where: {
+        platform: 'reddit',
+        handle: { in: missingSubreddits }
+      },
+      select: { id: true, handle: true, weight: true }
+    });
+    existingAccounts.push(...newAccounts);
+  }
 
-    subredditAccounts.set(subreddit, { id: account.id, weight: account.weight });
+  // Map all accounts for quick lookup
+  for (const account of existingAccounts) {
+    subredditAccounts.set(account.handle, { id: account.id, weight: account.weight });
   }
 
   try {
@@ -210,67 +231,126 @@ export async function fetchRedditPosts(): Promise<{
     const posts = await reddit.fetchAllSubreddits(20);
     result.postsFound = posts.length;
 
-    for (const post of posts) {
-      const accountInfo = subredditAccounts.get(post.subreddit);
-      if (!accountInfo) continue;
+    // Filter out posts from unknown subreddits and collect post keys for batch check
+    const postsWithAccounts = posts
+      .map(post => {
+        const accountInfo = subredditAccounts.get(post.subreddit);
+        return accountInfo ? { post, accountInfo } : null;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
 
-      // Check if post already exists
-      const existing = await db.socialPost.findUnique({
-        where: {
-          accountId_externalId: {
-            accountId: accountInfo.id,
-            externalId: post.id,
-          },
-        },
-      });
+    if (postsWithAccounts.length === 0) {
+      console.log('[Reddit] No posts to process');
+      return result;
+    }
 
-      if (existing) continue;
+    // Batch check which posts already exist
+    const postKeys = postsWithAccounts.map(({ post, accountInfo }) => ({
+      accountId: accountInfo.id,
+      externalId: post.id,
+    }));
 
-      // Calculate engagement score
+    const existingPosts = await db.socialPost.findMany({
+      where: {
+        OR: postKeys.map(key => ({
+          accountId: key.accountId,
+          externalId: key.externalId,
+        })),
+      },
+      select: { accountId: true, externalId: true, id: true },
+    });
+
+    // Create a set of existing post keys for quick lookup
+    const existingKeys = new Set(
+      existingPosts.map(p => `${p.accountId}:${p.externalId}`)
+    );
+
+    // Filter to only new posts
+    const newPostsWithAccounts = postsWithAccounts.filter(
+      ({ post, accountInfo }) =>
+        !existingKeys.has(`${accountInfo.id}:${post.id}`)
+    );
+
+    if (newPostsWithAccounts.length === 0) {
+      console.log('[Reddit] All posts already exist');
+      return result;
+    }
+
+    // Batch create new posts
+    const postsToCreate = newPostsWithAccounts.map(({ post, accountInfo }) => {
       const engagement = reddit.calculateEngagement(post);
+      return {
+        accountId: accountInfo.id,
+        externalId: post.id,
+        content: `${post.title}\n\n${post.content}`.substring(0, 5000),
+        sentiment: post.sentiment,
+        impactScore: engagement * accountInfo.weight * (post.sentiment === 'positive' ? 1 : post.sentiment === 'negative' ? -1 : 0),
+        metrics: {
+          score: post.score,
+          upvoteRatio: post.upvoteRatio,
+          comments: post.commentCount,
+          flair: post.flair,
+          subreddit: post.subreddit,
+        },
+        publishedAt: post.createdAt,
+        processed: true, // Already analyzed during fetch
+      };
+    });
 
-      // Save new post
-      const savedPost = await db.socialPost.create({
-        data: {
+    await db.socialPost.createMany({
+      data: postsToCreate,
+      skipDuplicates: true,
+    });
+    result.postsSaved = postsToCreate.length;
+
+    // Fetch the created posts to get their IDs for mentions
+    const createdPosts = await db.socialPost.findMany({
+      where: {
+        OR: newPostsWithAccounts.map(({ post, accountInfo }) => ({
           accountId: accountInfo.id,
           externalId: post.id,
-          content: `${post.title}\n\n${post.content}`.substring(0, 5000),
-          sentiment: post.sentiment,
-          impactScore: engagement * accountInfo.weight * (post.sentiment === 'positive' ? 1 : post.sentiment === 'negative' ? -1 : 0),
-          metrics: {
-            score: post.score,
-            upvoteRatio: post.upvoteRatio,
-            comments: post.commentCount,
-            flair: post.flair,
-            subreddit: post.subreddit,
-          },
-          publishedAt: post.createdAt,
-          processed: true, // Already analyzed during fetch
-        },
-      });
-      result.postsSaved++;
+        })),
+      },
+      select: { id: true, accountId: true, externalId: true },
+    });
 
-      // Create mentions for each ticker found
+    // Create a map for quick lookup
+    const postIdMap = new Map(
+      createdPosts.map(p => [`${p.accountId}:${p.externalId}`, p.id])
+    );
+
+    // Batch create mentions
+    const mentionsToCreate: Array<{
+      postId: string;
+      companyId: string;
+      sentiment: string;
+      confidence: number;
+    }> = [];
+
+    for (const { post, accountInfo } of newPostsWithAccounts) {
+      const postId = postIdMap.get(`${accountInfo.id}:${post.id}`);
+      if (!postId) continue;
+
+      const engagement = reddit.calculateEngagement(post);
       for (const ticker of post.tickers) {
         const company = tickerToCompany.get(ticker);
         if (company) {
-          await db.socialMention.upsert({
-            where: {
-              postId_companyId: {
-                postId: savedPost.id,
-                companyId: company.id,
-              },
-            },
-            create: {
-              postId: savedPost.id,
-              companyId: company.id,
-              sentiment: post.sentiment,
-              confidence: Math.min(0.9, 0.5 + engagement * accountInfo.weight),
-            },
-            update: {},
+          mentionsToCreate.push({
+            postId,
+            companyId: company.id,
+            sentiment: post.sentiment,
+            confidence: Math.min(0.9, 0.5 + engagement * accountInfo.weight),
           });
         }
       }
+    }
+
+    // Batch insert mentions (use createMany with skipDuplicates)
+    if (mentionsToCreate.length > 0) {
+      await db.socialMention.createMany({
+        data: mentionsToCreate,
+        skipDuplicates: true,
+      });
     }
 
     console.log(`[Reddit] Found ${result.postsFound} posts, saved ${result.postsSaved} new`);
@@ -309,28 +389,50 @@ export async function fetchBlueskyPosts(): Promise<{
 
   console.log(`[Bluesky] Fetching from influential accounts...`);
 
-  // Get or create accounts for Bluesky influencers
+  // Get or create accounts for Bluesky influencers (OPTIMIZED: batch query)
   const blueskyAccounts = new Map<string, { id: string; weight: number }>();
 
-  for (const handle of bluesky.FINANCE_ACCOUNTS) {
-    let account = await db.influentialAccount.findFirst({
-      where: { platform: 'bluesky', handle },
+  // Fetch all existing Bluesky accounts in one query
+  const existingBlueskyAccounts = await db.influentialAccount.findMany({
+    where: {
+      platform: 'bluesky',
+      handle: { in: bluesky.FINANCE_ACCOUNTS }
+    },
+    select: { id: true, handle: true, weight: true }
+  });
+
+  // Identify missing accounts
+  const existingBlueskyHandles = new Set(existingBlueskyAccounts.map(a => a.handle));
+  const missingHandles = bluesky.FINANCE_ACCOUNTS.filter(h => !existingBlueskyHandles.has(h));
+
+  // Bulk create missing accounts
+  if (missingHandles.length > 0) {
+    await db.influentialAccount.createMany({
+      data: missingHandles.map(handle => ({
+        platform: 'bluesky',
+        handle,
+        name: handle.replace('.bsky.social', ''),
+        weight: 0.75, // High weight for influential accounts
+        isActive: true,
+      })),
+      skipDuplicates: true,
     });
+    console.log(`[Bluesky] Created ${missingHandles.length} new accounts`);
 
-    if (!account) {
-      account = await db.influentialAccount.create({
-        data: {
-          platform: 'bluesky',
-          handle,
-          name: handle.replace('.bsky.social', ''),
-          weight: 0.75, // High weight for influential accounts
-          isActive: true,
-        },
-      });
-      console.log(`[Bluesky] Created account for ${handle}`);
-    }
+    // Fetch the newly created accounts
+    const newBlueskyAccounts = await db.influentialAccount.findMany({
+      where: {
+        platform: 'bluesky',
+        handle: { in: missingHandles }
+      },
+      select: { id: true, handle: true, weight: true }
+    });
+    existingBlueskyAccounts.push(...newBlueskyAccounts);
+  }
 
-    blueskyAccounts.set(handle, { id: account.id, weight: account.weight });
+  // Map all accounts for quick lookup
+  for (const account of existingBlueskyAccounts) {
+    blueskyAccounts.set(account.handle, { id: account.id, weight: account.weight });
   }
 
   try {
