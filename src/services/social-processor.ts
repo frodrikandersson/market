@@ -666,6 +666,7 @@ export async function getSocialImpact(
 export const socialProcessor = {
   fetchRSSPosts,
   fetchRedditPosts,
+  fetchBlueskyPosts,
   analyzeUnprocessedPosts,
   fetchAndProcessSocial,
   getSocialImpact,
