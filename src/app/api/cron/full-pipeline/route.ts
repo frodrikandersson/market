@@ -2,12 +2,24 @@
  * Cron Endpoint: Full Pipeline
  * ============================
  * Runs the complete data pipeline in sequence:
- * 1. Fetch news from all sources
- * 2. Fetch social media posts (Reddit, RSS)
- * 3. Fetch stock prices
+ * 1. Fetch news from all sources (NewsAPI, Finnhub, RSS, SEC EDGAR, Earnings, YouTube)
+ * 2. Fetch social media posts (Reddit, Bluesky)
+ * 3. Fetch stock prices (US stocks only - Finnhub free tier)
  * 4. Run predictions (Fundamentals + Hype models)
  * 5. Evaluate previous predictions
  * 6. Execute auto-trades for all AI portfolios
+ *
+ * Data Sources (Phase 1-3):
+ * - NewsAPI: 27 domains, 100 articles
+ * - Finnhub: 120 articles
+ * - RSS: 12 feeds, 300-400 articles (unlimited)
+ * - SEC EDGAR: 50 filings (8-K, Form 4)
+ * - Earnings: 30 reports (recent + upcoming)
+ * - YouTube: 10-20 videos (optional, requires API key)
+ * - Reddit: 33 subreddits, 2,640 posts
+ * - Bluesky: 85 search terms, 1,000 posts
+ *
+ * AI: DeepSeek (primary) → Gemini (fallback)
  *
  * Recommended schedule: Every 30 minutes during market hours
  *

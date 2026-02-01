@@ -406,11 +406,16 @@ export async function runDailyPredictions(): Promise<RunPredictionsResult> {
 
   const companyIds = companiesWithNews.map((c) => c.companyId);
 
-  // Get company details
+  // Get company details (US stocks only - Finnhub free tier limitation)
   const companies = await db.company.findMany({
     where: {
       id: { in: companyIds },
       isActive: true,
+      ticker: {
+        not: {
+          contains: '.', // Exclude international stocks (.PA, .AX, .TO, etc.)
+        },
+      },
     },
     select: { id: true, ticker: true, name: true },
   });

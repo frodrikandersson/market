@@ -13,6 +13,10 @@ import { db } from '@/lib/db';
 import { newsapi } from '@/lib/newsapi';
 import { finnhub } from '@/lib/finnhub';
 import { rss } from '@/lib/rss';
+import { secEdgar } from '@/lib/sec-edgar';
+import { earnings } from '@/lib/earnings';
+import { youtube } from '@/lib/youtube';
+import { deepseek } from '@/lib/deepseek';
 import { gemini } from '@/lib/gemini';
 import { companyDiscovery } from '@/services/company-discovery';
 import type {
@@ -102,6 +106,60 @@ function normalizeRSSArticle(article: NewsAPIArticle): ProcessedArticle {
     url: article.url,
     imageUrl: article.urlToImage,
     author: article.author,
+    publishedAt: new Date(article.publishedAt),
+    analysis: null,
+  };
+}
+
+/**
+ * Convert SEC filing to our format
+ */
+function normalizeSECArticle(article: NewsAPIArticle): ProcessedArticle {
+  return {
+    sourceId: 'sec-edgar',
+    externalId: null,
+    title: article.title,
+    content: article.content || article.description,
+    summary: null,
+    url: article.url,
+    imageUrl: article.urlToImage,
+    author: article.author || 'SEC',
+    publishedAt: new Date(article.publishedAt),
+    analysis: null,
+  };
+}
+
+/**
+ * Convert earnings report to our format
+ */
+function normalizeEarningsArticle(article: NewsAPIArticle): ProcessedArticle {
+  return {
+    sourceId: 'earnings',
+    externalId: null,
+    title: article.title,
+    content: article.content || article.description,
+    summary: null,
+    url: article.url,
+    imageUrl: article.urlToImage,
+    author: article.author || 'Earnings Calendar',
+    publishedAt: new Date(article.publishedAt),
+    analysis: null,
+  };
+}
+
+/**
+ * Convert YouTube video to our format
+ */
+function normalizeYouTubeArticle(article: NewsAPIArticle): ProcessedArticle {
+  return {
+    sourceId: 'youtube',
+    externalId: null,
+    title: article.title,
+    content: article.content || article.description,
+    summary: null,
+    url: article.url,
+    imageUrl: article.urlToImage,
+    author: article.author || 'YouTube',
     publishedAt: new Date(article.publishedAt),
     analysis: null,
   };
@@ -210,6 +268,40 @@ export async function fetchAllNews(): Promise<ProcessedArticle[]> {
     console.error('[RSS] Failed to fetch RSS feeds:', error);
   }
 
+  // Fetch from SEC EDGAR (8-K material events + Form 4 insider trading)
+  try {
+    console.log('[SEC] Fetching recent filings...');
+    const secFilings = await secEdgar.getAllRecentFilings(50);
+    articles.push(...secFilings.map(normalizeSECArticle));
+    console.log(`[SEC] Fetched ${secFilings.length} filings (8-K + Form 4)`);
+  } catch (error) {
+    console.error('[SEC] Failed to fetch SEC filings:', error);
+  }
+
+  // Fetch earnings reports (recent + upcoming)
+  try {
+    console.log('[Earnings] Fetching earnings calendar...');
+    const earningsData = await earnings.getAllEarnings();
+    articles.push(...earningsData.map(normalizeEarningsArticle));
+    console.log(`[Earnings] Fetched ${earningsData.length} earnings reports`);
+  } catch (error) {
+    console.error('[Earnings] Failed to fetch earnings data:', error);
+  }
+
+  // Fetch YouTube financial content (optional - requires API key)
+  try {
+    if (process.env.YOUTUBE_API_KEY) {
+      console.log('[YouTube] Fetching market news videos...');
+      const youtubeVideos = await youtube.getTodaysMarketNews();
+      articles.push(...youtubeVideos.map(normalizeYouTubeArticle));
+      console.log(`[YouTube] Fetched ${youtubeVideos.length} videos`);
+    } else {
+      console.log('[YouTube] Skipped - no API key configured (optional)');
+    }
+  } catch (error) {
+    console.error('[YouTube] Failed to fetch videos:', error);
+  }
+
   // Deduplicate
   const uniqueArticles = deduplicateArticles(articles);
   console.log(`[Total] ${articles.length} articles fetched, ${uniqueArticles.length} unique`);
@@ -295,11 +387,27 @@ export async function processUnprocessedArticles(
 
   for (const article of articles) {
     try {
-      // Analyze with Gemini
-      const analysis = await gemini.analyzeNewsArticle(
-        article.title,
-        article.content || article.title
-      );
+      // Analyze with AI (prefer DeepSeek if available, fall back to Gemini)
+      let analysis;
+      if (process.env.DEEPSEEK_API_KEY) {
+        try {
+          analysis = await deepseek.analyzeNewsArticle(
+            article.title,
+            article.content || article.title
+          );
+        } catch (deepseekError) {
+          console.log('[AI] DeepSeek failed, falling back to Gemini:', deepseekError);
+          analysis = await gemini.analyzeNewsArticle(
+            article.title,
+            article.content || article.title
+          );
+        }
+      } else {
+        analysis = await gemini.analyzeNewsArticle(
+          article.title,
+          article.content || article.title
+        );
+      }
 
       // Update article with summary
       await db.newsArticle.update({
