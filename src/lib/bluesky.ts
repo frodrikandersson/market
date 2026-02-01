@@ -202,6 +202,42 @@ async function getAccessToken(): Promise<string | null> {
   return session?.accessJwt || null;
 }
 
+/**
+ * Retry helper with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: Error | unknown;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on authentication errors
+      if (error instanceof Error && error.message.includes('Auth failed')) {
+        throw error;
+      }
+
+      // Don't retry on last attempt
+      if (i === maxRetries - 1) {
+        break;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = initialDelay * Math.pow(2, i);
+      console.log(`[Bluesky] Retry ${i + 1}/${maxRetries} after ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
 // ===========================================
 // Helper Functions
 // ===========================================
@@ -396,22 +432,25 @@ export async function searchPosts(
       return { posts: [] };
     }
 
-    let url = `${BLUESKY_API_BASE}/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(query)}&limit=${limit}`;
-    if (cursor) {
-      url += `&cursor=${cursor}`;
-    }
+    // Use retry logic for API calls
+    const data = await retryWithBackoff(async () => {
+      let url = `${BLUESKY_API_BASE}/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(query)}&limit=${limit}`;
+      if (cursor) {
+        url += `&cursor=${cursor}`;
+      }
 
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Search failed: ${res.statusText}`);
+      }
+
+      return await res.json();
     });
-
-    if (!res.ok) {
-      throw new Error(`Search failed: ${res.statusText}`);
-    }
-
-    const data = await res.json();
 
     const posts = data.posts.map((post: BlueskyPost) => convertToXTweet(post));
 
@@ -515,8 +554,8 @@ export async function getTrendingFinancePosts(limit: number = 200): Promise<XTwe
       const { posts } = await searchPosts(query, { limit: postsPerQuery });
       allPosts.push(...posts);
 
-      // Small delay between searches to avoid rate limits
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Delay between searches to avoid rate limits and API overload
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
       console.error(`[Bluesky] Error searching for "${query}":`, error);
     }

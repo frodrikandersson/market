@@ -22,24 +22,26 @@ export default async function Home() {
           <StatCard
             label="Fundamentals Accuracy"
             value={`${data.stats.fundamentalsAccuracy.toFixed(1)}%`}
-            trend={+2.1}
+            subtext={`${data.stats.totalPredictions} total predictions`}
             icon={<BarChart3 className="w-5 h-5" />}
           />
           <StatCard
             label="Hype Model Accuracy"
             value={`${data.stats.hypeAccuracy.toFixed(1)}%`}
-            trend={-1.3}
+            subtext={`${data.stats.totalPredictions} total predictions`}
             icon={<Activity className="w-5 h-5" />}
             variant="secondary"
           />
           <StatCard
-            label="Articles Processed"
-            value={data.stats.articlesProcessed.toLocaleString()}
+            label="Articles Collected"
+            value={data.stats.articlesFetched.toLocaleString()}
+            subtext={`${data.stats.articlesProcessed} analyzed by AI`}
             icon={<TrendingUp className="w-5 h-5" />}
           />
           <StatCard
-            label="Events Today"
-            value={data.stats.eventsToday.toString()}
+            label="Social Posts Today"
+            value={data.stats.socialPostsToday.toLocaleString()}
+            subtext={`${data.stats.redditPostsToday} Reddit, ${data.stats.blueskyPostsToday} Bluesky`}
             icon={<RefreshCw className="w-5 h-5" />}
           />
         </div>
@@ -163,12 +165,14 @@ export default async function Home() {
 function StatCard({
   label,
   value,
+  subtext,
   trend,
   icon,
   variant = 'primary',
 }: {
   label: string;
   value: string;
+  subtext?: string;
   trend?: number;
   icon: React.ReactNode;
   variant?: 'primary' | 'secondary';
@@ -188,6 +192,11 @@ function StatCard({
       >
         {value}
       </div>
+      {subtext && (
+        <div className="text-xs text-text-muted mt-0.5 md:mt-1">
+          {subtext}
+        </div>
+      )}
       {trend !== undefined && (
         <div className={`text-xs md:text-sm mt-0.5 md:mt-1 ${trend >= 0 ? 'text-positive' : 'text-negative'}`}>
           {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}% <span className="hidden sm:inline">vs last week</span>

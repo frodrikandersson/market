@@ -298,6 +298,12 @@ export async function generatePrediction(
       recentSentiments: [...newsImpact.sentiments, ...socialImpact.sentiments],
     };
 
+    // Skip prediction if no current price available
+    if (!currentPrice?.price) {
+      console.log(`[Predictor] Skipping ${ticker} - no current price available`);
+      return null;
+    }
+
     // Run the appropriate model
     const prediction = modelType === 'fundamentals' ? fundamentalsModel(input) : hypeModel(input);
 
@@ -314,7 +320,7 @@ export async function generatePrediction(
       modelType,
       direction: prediction.direction,
       confidence: prediction.confidence,
-      baselinePrice: currentPrice?.price ?? null,
+      baselinePrice: currentPrice.price,
       predictedChange,
       newsImpactScore: newsImpact.score,
       socialImpactScore: socialImpact.score,

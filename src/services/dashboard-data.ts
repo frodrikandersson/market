@@ -22,7 +22,11 @@ export interface DashboardStats {
   totalPredictions: number;
   todayPredictions: number;
   articlesProcessed: number;
+  articlesFetched: number;
   eventsToday: number;
+  socialPostsToday: number;
+  redditPostsToday: number;
+  blueskyPostsToday: number;
 }
 
 export interface DataSource {
@@ -145,12 +149,26 @@ export async function getStats(): Promise<DashboardStats> {
     hypePredictions.length > 0 ? (hypeCorrect / hypePredictions.length) * 100 : 0;
 
   // Get counts
-  const [totalPredictions, todayPredictions, articlesProcessed, eventsToday] =
+  const [totalPredictions, todayPredictions, articlesProcessed, articlesFetched, eventsToday, socialPostsToday, redditPostsToday, blueskyPostsToday] =
     await Promise.all([
       db.prediction.count(),
       db.prediction.count({ where: { predictionDate: { gte: today } } }),
       db.newsArticle.count({ where: { processed: true } }),
+      db.newsArticle.count(),
       db.newsEvent.count({ where: { createdAt: { gte: today } } }),
+      db.socialPost.count({ where: { fetchedAt: { gte: today } } }),
+      db.socialPost.count({
+        where: {
+          fetchedAt: { gte: today },
+          account: { platform: 'reddit' },
+        },
+      }),
+      db.socialPost.count({
+        where: {
+          fetchedAt: { gte: today },
+          account: { platform: 'bluesky' },
+        },
+      }),
     ]);
 
   return {
@@ -159,7 +177,11 @@ export async function getStats(): Promise<DashboardStats> {
     totalPredictions,
     todayPredictions,
     articlesProcessed,
+    articlesFetched,
     eventsToday,
+    socialPostsToday,
+    redditPostsToday,
+    blueskyPostsToday,
   };
 }
 
@@ -547,7 +569,11 @@ export async function getDashboardData(): Promise<DashboardData> {
         totalPredictions: 0,
         todayPredictions: 0,
         articlesProcessed: 0,
+        articlesFetched: 0,
         eventsToday: 0,
+        socialPostsToday: 0,
+        redditPostsToday: 0,
+        blueskyPostsToday: 0,
       },
       predictions: [],
       newsEvents: [],

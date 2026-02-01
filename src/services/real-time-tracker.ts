@@ -54,22 +54,36 @@ export async function trackActivePredictions(): Promise<TrackingResult> {
       try {
         result.predictionsChecked++;
 
-        // Get the baseline price (from when prediction was made)
-        const baselinePrices = await db.stockPrice.findMany({
-          where: {
-            companyId: prediction.companyId,
-            date: prediction.predictionDate,
-          },
-          orderBy: { date: "desc" },
-          take: 1,
-        });
+        // Get the baseline price from the prediction
+        let baselinePrice = prediction.baselinePrice;
 
-        if (baselinePrices.length === 0) {
-          result.errors.push(`No baseline price for ${prediction.company.ticker}`);
-          continue;
+        // If no baseline price, try to fetch it from StockPrice table
+        if (!baselinePrice) {
+          const baselinePrices = await db.stockPrice.findMany({
+            where: {
+              companyId: prediction.companyId,
+              date: prediction.predictionDate,
+            },
+            orderBy: { date: "desc" },
+            take: 1,
+          });
+
+          if (baselinePrices.length > 0) {
+            baselinePrice = baselinePrices[0].close;
+
+            // Update the prediction with the baseline price for future use
+            await db.prediction.update({
+              where: { id: prediction.id },
+              data: { baselinePrice },
+            });
+
+            console.log(`[Real-Time Tracker] Updated baseline price for ${prediction.company.ticker}: $${baselinePrice}`);
+          } else {
+            // Skip if we still can't find a baseline price
+            console.log(`[Real-Time Tracker] Skipping ${prediction.company.ticker} - no baseline price available`);
+            continue;
+          }
         }
-
-        const baselinePrice = baselinePrices[0].close;
 
         // Fetch current price
         const currentPriceData = await fetchQuote(prediction.company.ticker);
