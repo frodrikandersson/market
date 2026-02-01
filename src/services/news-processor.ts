@@ -580,7 +580,7 @@ export async function fetchAndProcessNews(): Promise<NewsProcessorResult> {
 
     // Step 3: Process with AI (includes auto-discovery)
     console.log('\n=== Step 3: AI Processing + Company Discovery ===');
-    const { processed, impacts, companiesDiscovered } = await processUnprocessedArticles(500);
+    const { processed, impacts, companiesDiscovered } = await processUnprocessedArticles(100);
     result.articlesProcessed = processed;
     result.impactsCreated = impacts;
     result.companiesDiscovered = companiesDiscovered;
