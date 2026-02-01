@@ -315,29 +315,33 @@ export async function fetchAllNews(): Promise<ProcessedArticle[]> {
 export async function saveArticles(
   articles: ProcessedArticle[]
 ): Promise<{ saved: number; skipped: number }> {
+  if (articles.length === 0) {
+    return { saved: 0, skipped: 0 };
+  }
+
+  // OPTIMIZED: Batch check for existing articles by URLs
+  const urls = articles.map((a) => a.url);
+  const existingArticles = await db.newsArticle.findMany({
+    where: { url: { in: urls } },
+    select: { url: true },
+  });
+
+  const existingUrls = new Set(existingArticles.map((a) => a.url));
+
+  // Filter out duplicates
+  const newArticles = articles.filter((article) => !existingUrls.has(article.url));
+  const skipped = articles.length - newArticles.length;
+
+  // Bulk insert new articles (in batches of 100 to avoid limits)
   let saved = 0;
-  let skipped = 0;
+  const batchSize = 100;
 
-  for (const article of articles) {
+  for (let i = 0; i < newArticles.length; i += batchSize) {
+    const batch = newArticles.slice(i, i + batchSize);
+
     try {
-      // Check if article already exists
-      const existing = await db.newsArticle.findFirst({
-        where: {
-          OR: [
-            { url: article.url },
-            { sourceId: article.sourceId, externalId: article.externalId },
-          ],
-        },
-      });
-
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      // Save new article
-      await db.newsArticle.create({
-        data: {
+      await db.newsArticle.createMany({
+        data: batch.map((article) => ({
           sourceId: article.sourceId,
           externalId: article.externalId,
           title: article.title,
@@ -347,11 +351,12 @@ export async function saveArticles(
           author: article.author,
           publishedAt: article.publishedAt,
           processed: false,
-        },
+        })),
+        skipDuplicates: true,
       });
-      saved++;
+      saved += batch.length;
     } catch (error) {
-      console.error(`[DB] Failed to save article: ${article.title}`, error);
+      console.error(`[DB] Failed to save batch:`, error);
     }
   }
 
