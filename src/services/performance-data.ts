@@ -46,11 +46,14 @@ export interface RecentPrediction {
   companyName: string;
   modelType: 'fundamentals' | 'hype';
   predictedDirection: 'up' | 'down';
-  actualDirection: string | null;
+  actualDirection: 'up' | 'down' | 'flat' | null;
   confidence: number;
   wasCorrect: boolean | null;
   targetDate: Date;
+  predictionDate: Date;
   actualChange: number | null;
+  timeframe?: string;
+  targetTime?: Date | null;
 }
 
 export interface ModelShowdown {
@@ -307,11 +310,14 @@ export async function getRecentPredictions(limit: number = 20): Promise<RecentPr
     companyName: p.company.name,
     modelType: p.modelType as 'fundamentals' | 'hype',
     predictedDirection: p.predictedDirection as 'up' | 'down',
-    actualDirection: p.actualDirection,
+    actualDirection: p.actualDirection as 'up' | 'down' | 'flat' | null,
     confidence: p.confidence,
     wasCorrect: p.wasCorrect,
     targetDate: p.targetDate,
+    predictionDate: p.predictionDate,
     actualChange: p.actualChange,
+    timeframe: p.timeframe,
+    targetTime: p.targetTime,
   }));
 }
 

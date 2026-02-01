@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { performanceData } from '@/services/performance-data';
 import { AccuracyChart, CalibrationChart, ModelComparisonChart } from '@/components/AccuracyChart';
 import { Header } from '@/components/Header';
+import { RecentPredictionsTable } from '@/components/RecentPredictionsTable';
 
 export const dynamic = 'force-dynamic';
 
@@ -143,100 +144,7 @@ export default async function PerformancePage() {
         </div>
 
         {/* Recent Predictions */}
-        <div className="bg-surface rounded-lg border border-border p-6">
-          <h2 className="text-xl font-semibold text-text-primary mb-4">Recent Predictions</h2>
-          {data.recentPredictions.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-text-muted border-b border-border">
-                    <th className="pb-3 font-medium">Date</th>
-                    <th className="pb-3 font-medium">Ticker</th>
-                    <th className="pb-3 font-medium">Model</th>
-                    <th className="pb-3 font-medium">Predicted</th>
-                    <th className="pb-3 font-medium">Actual</th>
-                    <th className="pb-3 font-medium">Confidence</th>
-                    <th className="pb-3 font-medium">Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recentPredictions.map((pred) => (
-                    <tr key={pred.id} className="border-b border-border/50 hover:bg-background/50">
-                      <td className="py-3 font-mono-numbers text-text-secondary">
-                        {pred.targetDate.toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </td>
-                      <td className="py-3">
-                        <span className="font-semibold text-text-primary">{pred.ticker}</span>
-                      </td>
-                      <td className="py-3">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs ${
-                            pred.modelType === 'fundamentals'
-                              ? 'bg-primary/20 text-primary'
-                              : 'bg-secondary/20 text-secondary'
-                          }`}
-                        >
-                          {pred.modelType === 'fundamentals' ? 'Fund' : 'Hype'}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        <span
-                          className={
-                            pred.predictedDirection === 'up' ? 'text-positive' : 'text-negative'
-                          }
-                        >
-                          {pred.predictedDirection === 'up' ? '▲ UP' : '▼ DOWN'}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        {pred.actualDirection ? (
-                          <span
-                            className={
-                              pred.actualDirection === 'up' ? 'text-positive' : 'text-negative'
-                            }
-                          >
-                            {pred.actualDirection === 'up' ? '▲ UP' : '▼ DOWN'}
-                            {pred.actualChange !== null && (
-                              <span className="text-text-muted text-xs ml-1">
-                                ({pred.actualChange > 0 ? '+' : ''}
-                                {pred.actualChange.toFixed(2)}%)
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-text-muted">Pending</span>
-                        )}
-                      </td>
-                      <td className="py-3 font-mono-numbers text-text-secondary">
-                        {(pred.confidence * 100).toFixed(0)}%
-                      </td>
-                      <td className="py-3">
-                        {pred.wasCorrect !== null ? (
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs ${
-                              pred.wasCorrect
-                                ? 'bg-positive/20 text-positive'
-                                : 'bg-negative/20 text-negative'
-                            }`}
-                          >
-                            {pred.wasCorrect ? 'Correct' : 'Wrong'}
-                          </span>
-                        ) : (
-                          <span className="text-text-muted text-xs">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-text-muted text-sm">No predictions yet</p>
-          )}
-        </div>
+        <RecentPredictionsTable predictions={data.recentPredictions} />
 
         {/* Disclaimer */}
         <div className="mt-12 p-4 bg-surface/50 rounded-lg border border-border">
