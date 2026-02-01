@@ -18,7 +18,7 @@ export default async function Home() {
 
       <div className="container mx-auto px-4 py-8">
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
           <StatCard
             label="Fundamentals Accuracy"
             value={`${data.stats.fundamentalsAccuracy.toFixed(1)}%`}
@@ -45,7 +45,7 @@ export default async function Home() {
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
           {/* Predictions Grid */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
@@ -174,23 +174,23 @@ function StatCard({
   variant?: 'primary' | 'secondary';
 }) {
   return (
-    <div className="bg-surface rounded-lg border border-border p-6 hover:border-primary/30 transition-colors">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-text-muted text-sm uppercase tracking-wider">{label}</span>
-        <span className={variant === 'secondary' ? 'text-secondary' : 'text-primary'}>
+    <div className="bg-surface rounded-lg border border-border p-3 md:p-6 hover:border-primary/30 transition-colors">
+      <div className="flex items-center justify-between mb-1 md:mb-2">
+        <span className="text-text-muted text-xs md:text-sm uppercase tracking-wider">{label}</span>
+        <span className={`${variant === 'secondary' ? 'text-secondary' : 'text-primary'} [&>svg]:w-4 [&>svg]:h-4 md:[&>svg]:w-6 md:[&>svg]:h-6`}>
           {icon}
         </span>
       </div>
       <div
-        className={`text-3xl font-bold font-mono-numbers ${
+        className={`text-xl md:text-3xl font-bold font-mono-numbers ${
           variant === 'secondary' ? 'text-secondary' : 'text-primary'
         }`}
       >
         {value}
       </div>
       {trend !== undefined && (
-        <div className={`text-sm mt-1 ${trend >= 0 ? 'text-positive' : 'text-negative'}`}>
-          {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}% vs last week
+        <div className={`text-xs md:text-sm mt-0.5 md:mt-1 ${trend >= 0 ? 'text-positive' : 'text-negative'}`}>
+          {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}% <span className="hidden sm:inline">vs last week</span>
         </div>
       )}
     </div>
@@ -293,7 +293,7 @@ function StockCard({
       )}
 
       {/* Dual Model Predictions */}
-      <div className="grid grid-cols-2 gap-2 text-sm">
+      <div className="grid grid-cols-2 gap-2 text-xs md:text-sm">
         <div className="bg-background/50 rounded p-2 border border-border">
           <span className="text-text-muted text-xs block mb-1">FUNDAMENTALS</span>
           {fundamentals ? (

@@ -113,17 +113,17 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-3 md:mb-4 gap-3">
         <div>
-          <div className="flex items-baseline gap-3">
-            <span className="text-2xl font-bold font-mono-numbers text-text-primary">
+          <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+            <span className="text-xl md:text-2xl font-bold font-mono-numbers text-text-primary">
               ${endPrice.toFixed(2)}
             </span>
-            <span className={`text-lg font-mono-numbers ${priceChange >= 0 ? 'text-positive' : 'text-negative'}`}>
+            <span className={`text-base md:text-lg font-mono-numbers ${priceChange >= 0 ? 'text-positive' : 'text-negative'}`}>
               {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
             </span>
           </div>
-          <p className="text-text-muted text-sm mt-1">
+          <p className="text-text-muted text-xs md:text-sm mt-1">
             {timeRange === '7D' ? 'Last 7 days' : timeRange === '30D' ? 'Last 30 days' : 'Last 90 days'}
           </p>
         </div>
@@ -135,7 +135,7 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
-                className={`px-3 py-1 text-sm rounded transition-colors ${
+                className={`px-2 md:px-3 py-1 text-xs md:text-sm rounded transition-colors ${
                   timeRange === range
                     ? 'bg-primary text-background font-medium'
                     : 'text-text-secondary hover:text-text-primary'
@@ -149,7 +149,7 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
           {/* Volume toggle */}
           <button
             onClick={() => setShowVolume(!showVolume)}
-            className={`px-3 py-1 text-sm rounded transition-colors border ${
+            className={`px-2 md:px-3 py-1 text-xs md:text-sm rounded transition-colors border ${
               showVolume
                 ? 'border-primary/50 text-primary bg-primary/10'
                 : 'border-border text-text-muted hover:text-text-secondary'
@@ -161,7 +161,8 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={showVolume ? 350 : 280}>
+      <div className={showVolume ? "h-[280px] md:h-[350px]" : "h-[220px] md:h-[280px]"}>
+      <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" />
           <XAxis
@@ -230,6 +231,7 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
           {/* High/Low area could go here for candlestick effect */}
         </ComposedChart>
       </ResponsiveContainer>
+      </div>
 
       {/* Stats bar */}
       <div className="flex justify-between mt-4 pt-4 border-t border-border text-sm">

@@ -76,25 +76,30 @@ export function AccuracyChart({ data, title, showArea = false }: AccuracyChartPr
   return (
     <div className="w-full">
       {title && (
-        <h3 className="text-lg font-semibold text-text-primary mb-4">{title}</h3>
+        <h3 className="text-base md:text-lg font-semibold text-text-primary mb-3 md:mb-4">{title}</h3>
       )}
-      <ResponsiveContainer width="100%" height={300}>
+      <div className="h-[200px] md:h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
         <ChartComponent data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" />
           <XAxis
             dataKey="date"
             stroke="#6b6b7a"
-            fontSize={12}
+            fontSize={10}
             tickLine={false}
             axisLine={{ stroke: '#2a2a3a' }}
+            angle={-45}
+            textAnchor="end"
+            height={60}
           />
           <YAxis
             stroke="#6b6b7a"
-            fontSize={12}
+            fontSize={10}
             tickLine={false}
             axisLine={{ stroke: '#2a2a3a' }}
             domain={[0, 100]}
             tickFormatter={(value) => `${value}%`}
+            width={40}
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend
@@ -143,6 +148,7 @@ export function AccuracyChart({ data, title, showArea = false }: AccuracyChartPr
           />
         </ChartComponent>
       </ResponsiveContainer>
+      </div>
     </div>
   );
 }

@@ -47,8 +47,8 @@ export default async function StockDetailPage({ params }: PageProps) {
         {/* Stock Header */}
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-8">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-4xl font-bold font-mono-numbers text-text-primary">
+            <div className="flex items-center gap-2 md:gap-3 mb-2">
+              <h1 className="text-2xl md:text-4xl font-bold font-mono-numbers text-text-primary">
                 {company.ticker}
               </h1>
               {company.sector && (
@@ -57,7 +57,7 @@ export default async function StockDetailPage({ params }: PageProps) {
                 </span>
               )}
             </div>
-            <p className="text-text-secondary text-lg">{company.name}</p>
+            <p className="text-text-secondary text-base md:text-lg">{company.name}</p>
             {company.marketCap && (
               <p className="text-text-muted text-sm mt-1">
                 Market Cap: ${(company.marketCap / 1e9).toFixed(2)}B
@@ -66,8 +66,8 @@ export default async function StockDetailPage({ params }: PageProps) {
           </div>
 
           {latestPrice && (
-            <div className="bg-surface rounded-lg border border-border p-6">
-              <div className="text-4xl font-bold font-mono-numbers text-text-primary">
+            <div className="bg-surface rounded-lg border border-border p-4 md:p-6">
+              <div className="text-2xl md:text-4xl font-bold font-mono-numbers text-text-primary">
                 ${latestPrice.close.toFixed(2)}
               </div>
               <div
@@ -76,11 +76,11 @@ export default async function StockDetailPage({ params }: PageProps) {
                 }`}
               >
                 {latestPrice.changePercent >= 0 ? (
-                  <TrendingUp className="w-5 h-5" />
+                  <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />
                 ) : (
-                  <TrendingDown className="w-5 h-5" />
+                  <TrendingDown className="w-4 h-4 md:w-5 md:h-5" />
                 )}
-                <span className="font-mono-numbers text-lg">
+                <span className="font-mono-numbers text-base md:text-lg">
                   {latestPrice.changePercent >= 0 ? '+' : ''}
                   {latestPrice.change.toFixed(2)} ({latestPrice.changePercent.toFixed(2)}%)
                 </span>
