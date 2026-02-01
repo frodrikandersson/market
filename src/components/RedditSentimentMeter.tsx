@@ -37,16 +37,16 @@ export function RedditSentimentMeter({ sentiment }: RedditSentimentMeterProps) {
           <div
             className="absolute inset-0 rounded-t-full"
             style={{
-              background: `conic-gradient(
-                from 270deg,
-                #ff3366 0deg,
-                #ff3366 36deg,
-                #ffcc00 36deg,
-                #ffcc00 72deg,
-                #8b8b9a 72deg,
-                #8b8b9a 108deg,
-                #00ff88 108deg,
-                #00ff88 180deg
+              background: `linear-gradient(
+                to right,
+                #ff3366 0%,
+                #ff3366 20%,
+                #ffcc00 20%,
+                #ffcc00 40%,
+                #8b8b9a 40%,
+                #8b8b9a 60%,
+                #00ff88 60%,
+                #00ff88 100%
               )`,
             }}
           />
