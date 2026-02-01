@@ -252,7 +252,7 @@ export async function fetchAllNews(): Promise<ProcessedArticle[]> {
       articles.push(...companyNews.slice(0, 10).map(normalizeFinnhubArticle));
       console.log(`[Finnhub] Fetched ${companyNews.length} news for ${ticker}`);
       // Small delay to avoid rate limits
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
       console.error(`[Finnhub] Failed to fetch news for ${ticker}:`, error);
     }

@@ -86,61 +86,113 @@ export async function fetchRSSPosts(): Promise<{
     const posts = await socialRSS.fetchAll();
     result.postsFound = posts.length;
 
-    for (const post of posts) {
-      // Check if post already exists
-      const existing = await db.socialPost.findUnique({
-        where: {
-          accountId_externalId: {
-            accountId: rssAccount.id,
-            externalId: post.id,
-          },
-        },
-      });
+    if (posts.length === 0) {
+      console.log('[SocialRSS] No posts to process');
+      return result;
+    }
 
-      if (existing) continue;
+    // Batch check which posts already exist
+    const postKeys = posts.map(post => ({
+      accountId: rssAccount.id,
+      externalId: post.id,
+    }));
 
-      // Save new post
-      const savedPost = await db.socialPost.create({
-        data: {
+    const existingPosts = await db.socialPost.findMany({
+      where: {
+        OR: postKeys.map(key => ({
+          accountId: key.accountId,
+          externalId: key.externalId,
+        })),
+      },
+      select: { accountId: true, externalId: true, id: true },
+    });
+
+    // Create a set of existing post keys for quick lookup
+    const existingKeys = new Set(
+      existingPosts.map(p => `${p.accountId}:${p.externalId}`)
+    );
+
+    // Filter to only new posts
+    const newPosts = posts.filter(
+      post => !existingKeys.has(`${rssAccount.id}:${post.id}`)
+    );
+
+    if (newPosts.length === 0) {
+      console.log('[SocialRSS] All posts already exist');
+      return result;
+    }
+
+    // Batch create new posts
+    const postsToCreate = newPosts.map(post => ({
+      accountId: rssAccount.id,
+      externalId: post.id,
+      content: post.text,
+      metrics: {
+        likes: post.public_metrics?.like_count || 0,
+        retweets: 0,
+        replies: 0,
+        quotes: 0,
+      },
+      publishedAt: new Date(post.created_at),
+      processed: false,
+    }));
+
+    await db.socialPost.createMany({
+      data: postsToCreate,
+      skipDuplicates: true,
+    });
+    result.postsSaved = postsToCreate.length;
+
+    // Fetch the created posts to get their IDs for mentions
+    const createdPosts = await db.socialPost.findMany({
+      where: {
+        OR: newPosts.map(post => ({
           accountId: rssAccount.id,
           externalId: post.id,
-          content: post.text,
-          metrics: {
-            likes: post.public_metrics?.like_count || 0,
-            retweets: 0,
-            replies: 0,
-            quotes: 0,
-          },
-          publishedAt: new Date(post.created_at),
-          processed: false,
-        },
-      });
-      result.postsSaved++;
+        })),
+      },
+      select: { id: true, accountId: true, externalId: true },
+    });
 
-      // Extract tickers and create mentions
+    // Create a map for quick lookup
+    const postIdMap = new Map(
+      createdPosts.map(p => [`${p.accountId}:${p.externalId}`, p.id])
+    );
+
+    // Batch create mentions
+    const mentionsToCreate: Array<{
+      postId: string;
+      companyId: string;
+      sentiment: string;
+      confidence: number;
+    }> = [];
+
+    for (const post of newPosts) {
+      const postId = postIdMap.get(`${rssAccount.id}:${post.id}`);
+      if (!postId) continue;
+
       const tickers = socialRSS.extractTickers(post.text);
       const sentiment = socialRSS.detectSentiment(post.text);
 
       for (const ticker of tickers) {
         const company = tickerToCompany.get(ticker);
         if (company) {
-          await db.socialMention.upsert({
-            where: {
-              postId_companyId: {
-                postId: savedPost.id,
-                companyId: company.id,
-              },
-            },
-            create: {
-              postId: savedPost.id,
-              companyId: company.id,
-              sentiment,
-              confidence: 0.75, // Good confidence for news-reported content
-            },
-            update: {},
+          mentionsToCreate.push({
+            postId,
+            companyId: company.id,
+            sentiment,
+            confidence: 0.75, // Good confidence for news-reported content
           });
         }
       }
+    }
+
+    // Batch insert mentions
+    if (mentionsToCreate.length > 0) {
+      await db.socialMention.createMany({
+        data: mentionsToCreate,
+        skipDuplicates: true,
+      });
     }
 
     console.log(`[SocialRSS] Found ${result.postsFound} posts, saved ${result.postsSaved} new`);
@@ -440,93 +492,137 @@ export async function fetchBlueskyPosts(): Promise<{
     const posts = await bluesky.getTrendingFinancePosts(200);
     result.postsFound = posts.length;
 
-    for (const post of posts) {
-      // Try to find which account this post is from (if any)
-      let accountInfo = null;
-      for (const [handle, info] of blueskyAccounts.entries()) {
-        // Note: We'd need to track author info, for now use a generic account
-        accountInfo = info;
-        break;
-      }
+    if (posts.length === 0) {
+      console.log('[Bluesky] No posts to process');
+      return result;
+    }
 
-      // If we can't match to an account, create a generic Bluesky account
-      if (!accountInfo) {
-        let genericAccount = await db.influentialAccount.findFirst({
-          where: { platform: 'bluesky', handle: 'trending' },
-        });
+    // Get or create generic "trending" account for posts we can't attribute
+    let genericAccount = await db.influentialAccount.findFirst({
+      where: { platform: 'bluesky', handle: 'trending' },
+    });
 
-        if (!genericAccount) {
-          genericAccount = await db.influentialAccount.create({
-            data: {
-              platform: 'bluesky',
-              handle: 'trending',
-              name: 'Bluesky Trending',
-              weight: 0.6,
-              isActive: true,
-            },
-          });
-        }
-
-        accountInfo = { id: genericAccount.id, weight: 0.6 };
-      }
-
-      // Check if post already exists
-      const existing = await db.socialPost.findUnique({
-        where: {
-          accountId_externalId: {
-            accountId: accountInfo.id,
-            externalId: post.id,
-          },
+    if (!genericAccount) {
+      genericAccount = await db.influentialAccount.create({
+        data: {
+          platform: 'bluesky',
+          handle: 'trending',
+          name: 'Bluesky Trending',
+          weight: 0.6,
+          isActive: true,
         },
       });
+    }
 
-      if (existing) continue;
+    const genericAccountInfo = { id: genericAccount.id, weight: 0.6 };
 
-      // Extract tickers
-      const tickers = bluesky.extractCashtags(post);
+    // Assign account to each post (for now, use generic account for all)
+    const postsWithAccounts = posts.map(post => ({
+      post,
+      accountInfo: genericAccountInfo,
+    }));
 
-      // Calculate engagement
-      const engagement = bluesky.calculateEngagement(post);
+    // Batch check which posts already exist
+    const postKeys = postsWithAccounts.map(({ post, accountInfo }) => ({
+      accountId: accountInfo.id,
+      externalId: post.id,
+    }));
 
-      // Save new post (will be analyzed by AI in next step)
-      const savedPost = await db.socialPost.create({
-        data: {
+    const existingPosts = await db.socialPost.findMany({
+      where: {
+        OR: postKeys.map(key => ({
+          accountId: key.accountId,
+          externalId: key.externalId,
+        })),
+      },
+      select: { accountId: true, externalId: true, id: true },
+    });
+
+    // Create a set of existing post keys for quick lookup
+    const existingKeys = new Set(
+      existingPosts.map(p => `${p.accountId}:${p.externalId}`)
+    );
+
+    // Filter to only new posts
+    const newPostsWithAccounts = postsWithAccounts.filter(
+      ({ post, accountInfo }) =>
+        !existingKeys.has(`${accountInfo.id}:${post.id}`)
+    );
+
+    if (newPostsWithAccounts.length === 0) {
+      console.log('[Bluesky] All posts already exist');
+      return result;
+    }
+
+    // Batch create new posts
+    const postsToCreate = newPostsWithAccounts.map(({ post, accountInfo }) => ({
+      accountId: accountInfo.id,
+      externalId: post.id,
+      content: post.text.substring(0, 5000),
+      metrics: {
+        likes: post.public_metrics?.like_count || 0,
+        retweets: post.public_metrics?.retweet_count || 0,
+        replies: post.public_metrics?.reply_count || 0,
+        quotes: post.public_metrics?.quote_count || 0,
+      },
+      publishedAt: new Date(post.created_at),
+      processed: false, // Will be analyzed by AI
+    }));
+
+    await db.socialPost.createMany({
+      data: postsToCreate,
+      skipDuplicates: true,
+    });
+    result.postsSaved = postsToCreate.length;
+
+    // Fetch the created posts to get their IDs for mentions
+    const createdPosts = await db.socialPost.findMany({
+      where: {
+        OR: newPostsWithAccounts.map(({ post, accountInfo }) => ({
           accountId: accountInfo.id,
           externalId: post.id,
-          content: post.text.substring(0, 5000),
-          metrics: {
-            likes: post.public_metrics?.like_count || 0,
-            retweets: post.public_metrics?.retweet_count || 0,
-            replies: post.public_metrics?.reply_count || 0,
-            quotes: post.public_metrics?.quote_count || 0,
-          },
-          publishedAt: new Date(post.created_at),
-          processed: false, // Will be analyzed by AI
-        },
-      });
-      result.postsSaved++;
+        })),
+      },
+      select: { id: true, accountId: true, externalId: true },
+    });
 
-      // Create initial mentions for found tickers (will be refined by AI)
+    // Create a map for quick lookup
+    const postIdMap = new Map(
+      createdPosts.map(p => [`${p.accountId}:${p.externalId}`, p.id])
+    );
+
+    // Batch create mentions
+    const mentionsToCreate: Array<{
+      postId: string;
+      companyId: string;
+      sentiment: string;
+      confidence: number;
+    }> = [];
+
+    for (const { post, accountInfo } of newPostsWithAccounts) {
+      const postId = postIdMap.get(`${accountInfo.id}:${post.id}`);
+      if (!postId) continue;
+
+      const tickers = bluesky.extractCashtags(post);
       for (const ticker of tickers) {
         const company = tickerToCompany.get(ticker);
         if (company) {
-          await db.socialMention.upsert({
-            where: {
-              postId_companyId: {
-                postId: savedPost.id,
-                companyId: company.id,
-              },
-            },
-            create: {
-              postId: savedPost.id,
-              companyId: company.id,
-              sentiment: 'neutral', // Will be determined by AI
-              confidence: 0.5,
-            },
-            update: {},
+          mentionsToCreate.push({
+            postId,
+            companyId: company.id,
+            sentiment: 'neutral', // Will be determined by AI
+            confidence: 0.5,
           });
         }
       }
+    }
+
+    // Batch insert mentions
+    if (mentionsToCreate.length > 0) {
+      await db.socialMention.createMany({
+        data: mentionsToCreate,
+        skipDuplicates: true,
+      });
     }
 
     console.log(`[Bluesky] Found ${result.postsFound} posts, saved ${result.postsSaved} new`);
