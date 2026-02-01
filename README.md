@@ -112,6 +112,49 @@ market/
 | `npm run db:seed` | Seed companies & influencers |
 | `npm run db:studio` | Open Prisma Studio |
 
+## Deployment & Cron Jobs
+
+### Railway Cron Configuration
+
+The app requires two scheduled cron jobs for optimal performance:
+
+#### 1. Full Pipeline (Every 30 minutes during market hours)
+- **Endpoint**: `/api/cron/full-pipeline?secret=YOUR_CRON_SECRET`
+- **Schedule**: `*/30 6-16 * * 1-5` (Every 30 mins, 6am-4pm ET, Mon-Fri)
+- **What it does**:
+  - Fetches ~600-700 news articles from all sources
+  - Fetches ~3,600 social media posts (Reddit + Bluesky)
+  - Processes **500 articles** with AI analysis
+  - Fetches stock prices
+  - Generates predictions (Fundamentals + Hype models)
+  - Evaluates previous predictions
+  - Executes auto-trades
+
+#### 2. Backlog Processor (Every 2 hours)
+- **Endpoint**: `/api/cron/backlog-processor?secret=YOUR_CRON_SECRET`
+- **Schedule**: `0 */2 * * *` (Every 2 hours)
+- **What it does**:
+  - Processes **2,000 unprocessed articles** from backlog
+  - Catches up on AI analysis when data collection outpaces processing
+  - Does NOT fetch new data (only processes existing backlog)
+
+### Setting up Railway Cron Jobs
+
+1. Go to your Railway project dashboard
+2. Click on your service → "Settings" → "Cron"
+3. Add two cron jobs with the schedules above
+4. Set the `CRON_SECRET` environment variable to a secure random string
+
+### Manual Trigger (Development)
+
+```bash
+# Trigger full pipeline
+curl http://localhost:3000/api/cron/full-pipeline
+
+# Trigger backlog processor
+curl http://localhost:3000/api/cron/backlog-processor
+```
+
 ## Development Workflow
 
 Before pushing changes or deploying, always run linting to catch errors:
