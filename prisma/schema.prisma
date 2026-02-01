@@ -206,6 +206,7 @@ model Prediction {
 
   // Prediction details
   predictedDirection String /// up, down
+  baselinePrice      Float? /// Stock price when prediction was made
   predictedChange    Float? /// Predicted % change
   confidence         Float /// 0-1
 

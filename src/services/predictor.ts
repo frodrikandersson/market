@@ -47,6 +47,8 @@ interface PredictionResult {
   modelType: ModelType;
   direction: PredictionDirection;
   confidence: number;
+  baselinePrice: number | null;
+  predictedChange: number | null;
   newsImpactScore: number | null;
   socialImpactScore: number | null;
   volatility: number | null;
@@ -277,12 +279,13 @@ export async function generatePrediction(
   modelType: ModelType
 ): Promise<PredictionResult | null> {
   try {
-    // Get input factors
-    const [newsImpact, socialImpact, volatility, momentum] = await Promise.all([
+    // Get input factors + current stock price
+    const [newsImpact, socialImpact, volatility, momentum, currentPrice] = await Promise.all([
       getNewsImpact(companyId, 24),
       getSocialImpact(companyId, 24),
       stockPriceService.calculateVolatility(companyId, 7),
       stockPriceService.calculateMomentum(companyId, 5),
+      stockPriceService.fetchQuote(ticker),
     ]);
 
     const input: PredictionInput = {
@@ -298,12 +301,21 @@ export async function generatePrediction(
     // Run the appropriate model
     const prediction = modelType === 'fundamentals' ? fundamentalsModel(input) : hypeModel(input);
 
+    // Calculate predicted percentage change based on confidence and direction
+    // Higher confidence = larger predicted move
+    // Formula: ±(confidence × 3)% gives range of ~0.9% to ~2.85%
+    const predictedChange = prediction.direction === 'up'
+      ? prediction.confidence * 3
+      : -prediction.confidence * 3;
+
     return {
       companyId,
       ticker,
       modelType,
       direction: prediction.direction,
       confidence: prediction.confidence,
+      baselinePrice: currentPrice?.price ?? null,
+      predictedChange,
       newsImpactScore: newsImpact.score,
       socialImpactScore: socialImpact.score,
       volatility,
@@ -337,6 +349,8 @@ async function storePrediction(prediction: PredictionResult): Promise<void> {
     update: {
       predictedDirection: prediction.direction,
       confidence: prediction.confidence,
+      baselinePrice: prediction.baselinePrice,
+      predictedChange: prediction.predictedChange,
       newsImpactScore: prediction.newsImpactScore,
       socialImpactScore: prediction.socialImpactScore,
       priceVolatility: prediction.volatility,
@@ -349,6 +363,8 @@ async function storePrediction(prediction: PredictionResult): Promise<void> {
       modelType: prediction.modelType,
       predictedDirection: prediction.direction,
       confidence: prediction.confidence,
+      baselinePrice: prediction.baselinePrice,
+      predictedChange: prediction.predictedChange,
       newsImpactScore: prediction.newsImpactScore,
       socialImpactScore: prediction.socialImpactScore,
       priceVolatility: prediction.volatility,

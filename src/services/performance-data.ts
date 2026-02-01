@@ -54,6 +54,10 @@ export interface RecentPrediction {
   actualChange: number | null;
   timeframe?: string;
   targetTime?: Date | null;
+  baselinePrice: number | null;
+  predictedChange: number | null;
+  currentPrice: number | null;
+  currentChange: number | null;
 }
 
 export interface ModelShowdown {
@@ -301,24 +305,42 @@ export async function getRecentPredictions(limit: number = 20): Promise<RecentPr
       company: {
         select: { ticker: true, name: true },
       },
+      snapshots: {
+        orderBy: { checkedAt: 'desc' },
+        take: 1, // Get only the latest snapshot
+      },
     },
   });
 
-  return predictions.map((p) => ({
-    id: p.id,
-    ticker: p.company.ticker,
-    companyName: p.company.name,
-    modelType: p.modelType as 'fundamentals' | 'hype',
-    predictedDirection: p.predictedDirection as 'up' | 'down',
-    actualDirection: p.actualDirection as 'up' | 'down' | 'flat' | null,
-    confidence: p.confidence,
-    wasCorrect: p.wasCorrect,
-    targetDate: p.targetDate,
-    predictionDate: p.predictionDate,
-    actualChange: p.actualChange,
-    timeframe: p.timeframe,
-    targetTime: p.targetTime,
-  }));
+  return predictions.map((p) => {
+    const latestSnapshot = p.snapshots[0]; // Most recent snapshot
+    const currentPrice = latestSnapshot?.currentPrice ?? null;
+
+    // Calculate current change from baseline if we have both prices
+    const currentChange = p.baselinePrice && currentPrice
+      ? ((currentPrice - p.baselinePrice) / p.baselinePrice) * 100
+      : null;
+
+    return {
+      id: p.id,
+      ticker: p.company.ticker,
+      companyName: p.company.name,
+      modelType: p.modelType as 'fundamentals' | 'hype',
+      predictedDirection: p.predictedDirection as 'up' | 'down',
+      actualDirection: p.actualDirection as 'up' | 'down' | 'flat' | null,
+      confidence: p.confidence,
+      wasCorrect: p.wasCorrect,
+      targetDate: p.targetDate,
+      predictionDate: p.predictionDate,
+      actualChange: p.actualChange,
+      timeframe: p.timeframe,
+      targetTime: p.targetTime,
+      baselinePrice: p.baselinePrice,
+      predictedChange: p.predictedChange,
+      currentPrice,
+      currentChange,
+    };
+  });
 }
 
 /**

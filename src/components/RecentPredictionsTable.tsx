@@ -17,6 +17,10 @@ interface Prediction {
   actualChange: number | null;
   timeframe?: string;
   targetTime?: Date | null;
+  baselinePrice: number | null;
+  predictedChange: number | null;
+  currentPrice: number | null;
+  currentChange: number | null;
 }
 
 interface RecentPredictionsTableProps {
@@ -263,15 +267,28 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
                       </span>
                     </td>
 
-                    {/* Predicted Direction */}
+                    {/* Predicted Direction + Baseline Price + Predicted Change */}
                     <td className="py-3">
-                      <span
-                        className={
-                          pred.predictedDirection === 'up' ? 'text-positive' : 'text-negative'
-                        }
-                      >
-                        {pred.predictedDirection === 'up' ? '▲ UP' : '▼ DOWN'}
-                      </span>
+                      <div className="flex flex-col">
+                        <span
+                          className={
+                            pred.predictedDirection === 'up' ? 'text-positive' : 'text-negative'
+                          }
+                        >
+                          {pred.predictedDirection === 'up' ? '▲ UP' : '▼ DOWN'}
+                        </span>
+                        {pred.baselinePrice && (
+                          <span className="text-text-muted text-xs">
+                            from ${pred.baselinePrice.toFixed(2)}
+                          </span>
+                        )}
+                        {pred.predictedChange !== null && (
+                          <span className="text-xs text-primary/70">
+                            ({pred.predictedChange > 0 ? '+' : ''}
+                            {pred.predictedChange.toFixed(2)}%)
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Target Date/Time */}
@@ -302,6 +319,7 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
                     {/* Actual/Current Direction */}
                     <td className="py-3">
                       {pred.actualDirection ? (
+                        // After evaluation: show final result
                         <div className="flex flex-col">
                           <span
                             className={
@@ -322,6 +340,27 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
                             <span className="text-text-muted text-xs">
                               ({pred.actualChange > 0 ? '+' : ''}
                               {pred.actualChange.toFixed(2)}%)
+                            </span>
+                          )}
+                        </div>
+                      ) : pred.currentPrice ? (
+                        // Before evaluation: show current price from snapshots
+                        <div className="flex flex-col">
+                          <span className="text-text-secondary text-sm">
+                            ${pred.currentPrice.toFixed(2)}
+                          </span>
+                          {pred.currentChange !== null && (
+                            <span
+                              className={`text-xs ${
+                                pred.currentChange > 0
+                                  ? 'text-positive'
+                                  : pred.currentChange < 0
+                                    ? 'text-negative'
+                                    : 'text-text-muted'
+                              }`}
+                            >
+                              ({pred.currentChange > 0 ? '+' : ''}
+                              {pred.currentChange.toFixed(2)}%)
                             </span>
                           )}
                         </div>
