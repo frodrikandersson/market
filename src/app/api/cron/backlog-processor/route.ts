@@ -122,11 +122,11 @@ export async function GET(request: NextRequest) {
     // Step 2: Process unanalyzed social posts
     console.log('\n━━━ Processing Social Posts ━━━');
     try {
-      const { analyzed, mentionsCreated } = await socialProcessor.analyzeUnprocessedPosts(1000);
+      const { analyzed, mentions } = await socialProcessor.analyzeUnprocessedPosts(1000);
       results.socialPostsAnalyzed = analyzed;
-      results.socialMentionsCreated = mentionsCreated;
+      results.socialMentionsCreated = mentions;
       console.log(`✓ Analyzed: ${analyzed} social posts`);
-      console.log(`✓ Mentions: ${mentionsCreated} created`);
+      console.log(`✓ Mentions: ${mentions} created`);
     } catch (error) {
       console.error('✗ Social processing failed:', error);
       results.socialProcessing = { error: String(error) };
