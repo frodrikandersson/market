@@ -105,14 +105,22 @@ function fundamentalsModel(input: PredictionInput): PredictionOutput {
   // Determine direction
   const direction: PredictionDirection = score >= 0 ? 'up' : 'down';
 
-  // Calculate confidence
+  // Calculate confidence - IMPROVED FORMULA
   // Higher absolute score = higher confidence
-  // Higher volatility = lower confidence
+  // Higher volatility = lower confidence (but reduced penalty)
   const baseConfidence = Math.abs(score);
-  const volatilityPenalty = volatility ? Math.min(0.3, volatility * 5) : 0;
+
+  // Reduced volatility penalty from 0.3 to 0.15 max
+  const volatilityPenalty = volatility ? Math.min(0.15, volatility * 3) : 0;
+
+  // More generous formula: if you have strong signal, you get high confidence
+  // Old: baseConfidence * 0.8 + 0.2 - volatilityPenalty
+  // New: baseConfidence * 0.95 + 0.25 - volatilityPenalty
+  const rawConfidence = baseConfidence * 0.95 + 0.25 - volatilityPenalty;
+
   const confidence = Math.max(
     MIN_CONFIDENCE,
-    Math.min(MAX_CONFIDENCE, baseConfidence * 0.8 + 0.2 - volatilityPenalty)
+    Math.min(MAX_CONFIDENCE, rawConfidence)
   );
 
   return {
@@ -148,12 +156,16 @@ function hypeModel(input: PredictionInput): PredictionOutput {
   // Determine direction
   const direction: PredictionDirection = score >= 0 ? 'up' : 'down';
 
-  // Calculate confidence
-  // Hype model is generally less confident due to noise
-  const baseConfidence = Math.abs(score) * 0.7;
+  // Calculate confidence - IMPROVED FORMULA
+  // Hype model can now reach higher confidence when signal is strong
+  // Old: Math.abs(score) * 0.7 + 0.25, capped at 0.85
+  // New: Math.abs(score) * 0.85 + 0.3, can reach full MAX_CONFIDENCE
+  const baseConfidence = Math.abs(score) * 0.85;
+  const rawConfidence = baseConfidence + 0.3;
+
   const confidence = Math.max(
     MIN_CONFIDENCE,
-    Math.min(MAX_CONFIDENCE - 0.1, baseConfidence + 0.25)
+    Math.min(MAX_CONFIDENCE, rawConfidence)
   );
 
   return {

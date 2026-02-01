@@ -16,6 +16,7 @@
 import { db } from '@/lib/db';
 import { socialRSS } from '@/lib/social-rss';
 import { reddit } from '@/lib/reddit';
+import { bluesky } from '@/lib/bluesky';
 import { gemini } from '@/lib/gemini';
 import type { Sentiment } from '@/types';
 
@@ -283,6 +284,160 @@ export async function fetchRedditPosts(): Promise<{
 }
 
 /**
+ * Fetch posts from Bluesky influential accounts
+ */
+export async function fetchBlueskyPosts(): Promise<{
+  postsFound: number;
+  postsSaved: number;
+  errors: string[];
+}> {
+  const result = { postsFound: 0, postsSaved: 0, errors: [] as string[] };
+
+  // Check if Bluesky is available
+  const blueskyAvailable = await bluesky.isAvailable();
+  if (!blueskyAvailable) {
+    result.errors.push('Bluesky API not available');
+    return result;
+  }
+
+  // Get active companies for matching
+  const companies = await db.company.findMany({
+    where: { isActive: true },
+    select: { id: true, ticker: true, name: true },
+  });
+  const tickerToCompany = new Map(companies.map((c) => [c.ticker, c]));
+
+  console.log(`[Bluesky] Fetching from influential accounts...`);
+
+  // Get or create accounts for Bluesky influencers
+  const blueskyAccounts = new Map<string, { id: string; weight: number }>();
+
+  for (const handle of bluesky.FINANCE_ACCOUNTS) {
+    let account = await db.influentialAccount.findFirst({
+      where: { platform: 'bluesky', handle },
+    });
+
+    if (!account) {
+      account = await db.influentialAccount.create({
+        data: {
+          platform: 'bluesky',
+          handle,
+          name: handle.replace('.bsky.social', ''),
+          weight: 0.75, // High weight for influential accounts
+          isActive: true,
+        },
+      });
+      console.log(`[Bluesky] Created account for ${handle}`);
+    }
+
+    blueskyAccounts.set(handle, { id: account.id, weight: account.weight });
+  }
+
+  try {
+    // Fetch trending finance posts
+    const posts = await bluesky.getTrendingFinancePosts(50);
+    result.postsFound = posts.length;
+
+    for (const post of posts) {
+      // Try to find which account this post is from (if any)
+      let accountInfo = null;
+      for (const [handle, info] of blueskyAccounts.entries()) {
+        // Note: We'd need to track author info, for now use a generic account
+        accountInfo = info;
+        break;
+      }
+
+      // If we can't match to an account, create a generic Bluesky account
+      if (!accountInfo) {
+        let genericAccount = await db.influentialAccount.findFirst({
+          where: { platform: 'bluesky', handle: 'trending' },
+        });
+
+        if (!genericAccount) {
+          genericAccount = await db.influentialAccount.create({
+            data: {
+              platform: 'bluesky',
+              handle: 'trending',
+              name: 'Bluesky Trending',
+              weight: 0.6,
+              isActive: true,
+            },
+          });
+        }
+
+        accountInfo = { id: genericAccount.id, weight: 0.6 };
+      }
+
+      // Check if post already exists
+      const existing = await db.socialPost.findUnique({
+        where: {
+          accountId_externalId: {
+            accountId: accountInfo.id,
+            externalId: post.id,
+          },
+        },
+      });
+
+      if (existing) continue;
+
+      // Extract tickers
+      const tickers = bluesky.extractCashtags(post);
+
+      // Calculate engagement
+      const engagement = bluesky.calculateEngagement(post);
+
+      // Save new post (will be analyzed by AI in next step)
+      const savedPost = await db.socialPost.create({
+        data: {
+          accountId: accountInfo.id,
+          externalId: post.id,
+          content: post.text.substring(0, 5000),
+          metrics: {
+            likes: post.public_metrics?.like_count || 0,
+            retweets: post.public_metrics?.retweet_count || 0,
+            replies: post.public_metrics?.reply_count || 0,
+            quotes: post.public_metrics?.quote_count || 0,
+          },
+          publishedAt: new Date(post.created_at),
+          processed: false, // Will be analyzed by AI
+        },
+      });
+      result.postsSaved++;
+
+      // Create initial mentions for found tickers (will be refined by AI)
+      for (const ticker of tickers) {
+        const company = tickerToCompany.get(ticker);
+        if (company) {
+          await db.socialMention.upsert({
+            where: {
+              postId_companyId: {
+                postId: savedPost.id,
+                companyId: company.id,
+              },
+            },
+            create: {
+              postId: savedPost.id,
+              companyId: company.id,
+              sentiment: 'neutral', // Will be determined by AI
+              confidence: 0.5,
+            },
+            update: {},
+          });
+        }
+      }
+    }
+
+    console.log(`[Bluesky] Found ${result.postsFound} posts, saved ${result.postsSaved} new`);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    result.errors.push(errorMsg);
+    console.error('[Bluesky] Error:', errorMsg);
+  }
+
+  return result;
+}
+
+/**
  * Analyze unprocessed posts with AI
  */
 export async function analyzeUnprocessedPosts(
@@ -423,7 +578,7 @@ export async function fetchAndProcessSocial(): Promise<SocialProcessorResult> {
     }
 
     // Step 2: Fetch posts from Reddit r/wallstreetbets
-    console.log('\n=== Social Step 2: Fetching from Reddit r/wallstreetbets ===');
+    console.log('\n=== Social Step 2: Fetching from Reddit ===');
     const redditResult = await fetchRedditPosts();
     result.postsFound += redditResult.postsFound;
     result.postsSaved += redditResult.postsSaved;
@@ -433,8 +588,19 @@ export async function fetchAndProcessSocial(): Promise<SocialProcessorResult> {
       result.accountsProcessed++;
     }
 
-    // Step 3: Analyze any unprocessed posts with AI
-    console.log('\n=== Social Step 3: AI Analysis ===');
+    // Step 3: Fetch posts from Bluesky
+    console.log('\n=== Social Step 3: Fetching from Bluesky ===');
+    const blueskyResult = await fetchBlueskyPosts();
+    result.postsFound += blueskyResult.postsFound;
+    result.postsSaved += blueskyResult.postsSaved;
+    result.errors.push(...blueskyResult.errors);
+
+    if (blueskyResult.postsFound > 0) {
+      result.accountsProcessed++;
+    }
+
+    // Step 4: Analyze any unprocessed posts with AI
+    console.log('\n=== Social Step 4: AI Analysis ===');
     const { analyzed, mentions } = await analyzeUnprocessedPosts(20);
     result.postsAnalyzed = analyzed;
     result.mentionsCreated = mentions;

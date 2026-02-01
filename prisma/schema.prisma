@@ -197,11 +197,16 @@ model Prediction {
   predictionDate DateTime @db.Date /// Date prediction was made
   targetDate     DateTime @db.Date /// Date being predicted (next trading day)
 
+  // Prediction timeframe: "15min", "1hour", "4hour", "1day", "1week"
+  timeframe      String   @default("1day")
+  targetTime     DateTime? /// Exact target datetime for intraday predictions
+
   // Model type: "fundamentals" or "hype"
   modelType String
 
   // Prediction details
   predictedDirection String /// up, down
+  predictedChange    Float? /// Predicted % change
   confidence         Float /// 0-1
 
   // Input factors (for explainability)
@@ -209,6 +214,10 @@ model Prediction {
   socialImpactScore Float? /// Aggregated social score (hype)
   priceVolatility   Float? /// Recent price volatility
   priceMomentum     Float? /// Recent price trend
+
+  // Real-time tracking
+  currentDeviation  Float? /// Current % difference from prediction
+  lastCheckedAt     DateTime? /// Last time we checked current price
 
   // Actual result (filled after market close)
   actualDirection String? /// up, down, flat
@@ -218,10 +227,29 @@ model Prediction {
   createdAt   DateTime  @default(now())
   evaluatedAt DateTime? /// When the prediction was evaluated
 
+  snapshots   PredictionSnapshot[] /// Real-time accuracy snapshots
+
   @@unique([companyId, targetDate, modelType])
   @@index([modelType])
   @@index([targetDate])
   @@index([wasCorrect])
+  @@index([timeframe])
+}
+
+/// PredictionSnapshot - tracks real-time accuracy of predictions
+model PredictionSnapshot {
+  id           String   @id @default(cuid())
+  predictionId String
+  prediction   Prediction @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+
+  checkedAt      DateTime @default(now()) /// When this snapshot was taken
+  currentPrice   Float /// Current stock price at check time
+  priceChange    Float /// % change from prediction start
+  deviation      Float /// Difference from predicted change
+  isCorrect      Boolean? /// Is direction correct so far?
+
+  @@index([predictionId])
+  @@index([checkedAt])
 }
 
 // ===========================================
