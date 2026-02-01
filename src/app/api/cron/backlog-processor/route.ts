@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { newsProcessor } from '@/services/news-processor';
+import { socialProcessor } from '@/services/social-processor';
 import type { Prisma } from '@prisma/client';
 
 function isAuthorized(request: NextRequest): boolean {
@@ -93,8 +94,11 @@ export async function GET(request: NextRequest) {
     console.log('╚════════════════════════════════════════╝\n');
 
     // Get current backlog size
-    const backlogSize = await db.newsArticle.count({ where: { processed: false } });
-    console.log(`Current backlog: ${backlogSize.toLocaleString()} unprocessed articles`);
+    const articleBacklog = await db.newsArticle.count({ where: { processed: false } });
+    const socialBacklog = await db.socialPost.count({ where: { sentiment: null } });
+    console.log(`Current backlog:`);
+    console.log(`  - ${articleBacklog.toLocaleString()} unprocessed articles`);
+    console.log(`  - ${socialBacklog.toLocaleString()} unanalyzed social posts`);
 
     // Step 1: Process unprocessed articles in large batch
     console.log('\n━━━ Processing Backlog Articles ━━━');
@@ -115,7 +119,20 @@ export async function GET(request: NextRequest) {
       results.processing = { error: String(error) };
     }
 
-    // Step 2: Cluster into events
+    // Step 2: Process unanalyzed social posts
+    console.log('\n━━━ Processing Social Posts ━━━');
+    try {
+      const { analyzed, mentionsCreated } = await socialProcessor.analyzeUnprocessedPosts(1000);
+      results.socialPostsAnalyzed = analyzed;
+      results.socialMentionsCreated = mentionsCreated;
+      console.log(`✓ Analyzed: ${analyzed} social posts`);
+      console.log(`✓ Mentions: ${mentionsCreated} created`);
+    } catch (error) {
+      console.error('✗ Social processing failed:', error);
+      results.socialProcessing = { error: String(error) };
+    }
+
+    // Step 3: Cluster into events
     console.log('\n━━━ Event Clustering ━━━');
     try {
       const eventsCreated = await newsProcessor.clusterIntoEvents(24);
@@ -127,10 +144,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Get updated backlog size
-    const remainingBacklog = await db.newsArticle.count({ where: { processed: false } });
-    results.backlogBefore = backlogSize;
-    results.backlogAfter = remainingBacklog;
-    results.backlogReduction = backlogSize - remainingBacklog;
+    const remainingArticleBacklog = await db.newsArticle.count({ where: { processed: false } });
+    const remainingSocialBacklog = await db.socialPost.count({ where: { sentiment: null } });
+
+    results.articleBacklogBefore = articleBacklog;
+    results.articleBacklogAfter = remainingArticleBacklog;
+    results.articleBacklogReduction = articleBacklog - remainingArticleBacklog;
+    results.socialBacklogBefore = socialBacklog;
+    results.socialBacklogAfter = remainingSocialBacklog;
+    results.socialBacklogReduction = socialBacklog - remainingSocialBacklog;
 
     const duration = Date.now() - startTime;
     results.durationMs = duration;
@@ -139,7 +161,8 @@ export async function GET(request: NextRequest) {
 
     console.log('\n╔════════════════════════════════════════╗');
     console.log(`║    BACKLOG PROCESSOR - Complete        ║`);
-    console.log(`║    Backlog: ${backlogSize} → ${remainingBacklog} (-${backlogSize - remainingBacklog})       `);
+    console.log(`║    Articles: ${articleBacklog} → ${remainingArticleBacklog} (-${articleBacklog - remainingArticleBacklog})          `);
+    console.log(`║    Social: ${socialBacklog} → ${remainingSocialBacklog} (-${socialBacklog - remainingSocialBacklog})             `);
     console.log(`║    Duration: ${(duration / 1000).toFixed(1)}s                      ║`);
     console.log('╚════════════════════════════════════════╝\n');
 
