@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
  * Cron endpoint: Track active predictions against current prices
  *
  * Schedule: Every 15 minutes during market hours (9:30 AM - 4:00 PM ET)
- * Example: */15 9-16 * * 1-5
+ * Cron schedule: [asterisk]/15 9-16 [asterisk] [asterisk] 1-5
  *
  * Usage:
  * GET /api/cron/track-predictions?secret=YOUR_CRON_SECRET
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   // Log job start
   const jobRecord = await db.cronJob.create({
     data: {
-      jobName: "track-predictions",
+      name: "track-predictions",
       status: "running",
       startedAt: new Date(),
     },
@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
       data: {
         status: "completed",
         completedAt: new Date(),
-        duration,
         metadata: {
+          duration,
           predictionsChecked: result.predictionsChecked,
           snapshotsCreated: result.snapshotsCreated,
           errors: result.errors,

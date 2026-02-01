@@ -7,7 +7,7 @@
  */
 
 import { db } from "@/lib/db";
-import { fetchStockPrice } from "./stock-price";
+import { fetchQuote } from "./stock-price";
 
 interface TrackingResult {
   predictionsChecked: number;
@@ -72,14 +72,14 @@ export async function trackActivePredictions(): Promise<TrackingResult> {
         const baselinePrice = baselinePrices[0].close;
 
         // Fetch current price
-        const currentPriceData = await fetchStockPrice(prediction.company.ticker);
+        const currentPriceData = await fetchQuote(prediction.company.ticker);
 
-        if (!currentPriceData || !currentPriceData.currentPrice) {
+        if (!currentPriceData || !currentPriceData.price) {
           result.errors.push(`Could not fetch current price for ${prediction.company.ticker}`);
           continue;
         }
 
-        const currentPrice = currentPriceData.currentPrice;
+        const currentPrice = currentPriceData.price;
 
         // Calculate current change
         const priceChange = ((currentPrice - baselinePrice) / baselinePrice) * 100;
