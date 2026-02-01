@@ -5,6 +5,9 @@
  * Replaces Twitter/X API for the hype model
  *
  * API Docs: https://docs.bsky.app/
+ *
+ * Authentication: Requires BLUESKY_USERNAME and BLUESKY_PASSWORD
+ * Create account at: https://bsky.app/
  */
 
 import type { XTweet } from "@/types";
@@ -13,7 +16,17 @@ import type { XTweet } from "@/types";
 // Configuration
 // ===========================================
 
-const BLUESKY_API_BASE = "https://public.api.bsky.app";
+const BLUESKY_API_BASE = "https://bsky.social";
+const BLUESKY_USERNAME = process.env.BLUESKY_USERNAME;
+const BLUESKY_PASSWORD = process.env.BLUESKY_PASSWORD;
+
+// Session management
+let cachedSession: {
+  accessJwt: string;
+  refreshJwt: string;
+  did: string;
+  expiresAt: number;
+} | null = null;
 
 // Influential finance accounts on Bluesky (50+ accounts)
 const FINANCE_ACCOUNTS = [
@@ -124,6 +137,72 @@ interface BlueskyFeed {
 }
 
 // ===========================================
+// Authentication
+// ===========================================
+
+/**
+ * Create an authenticated session with Bluesky
+ */
+async function createSession(): Promise<{
+  accessJwt: string;
+  refreshJwt: string;
+  did: string;
+} | null> {
+  if (!BLUESKY_USERNAME || !BLUESKY_PASSWORD) {
+    console.error('[Bluesky] Missing BLUESKY_USERNAME or BLUESKY_PASSWORD environment variables');
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${BLUESKY_API_BASE}/xrpc/com.atproto.server.createSession`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        identifier: BLUESKY_USERNAME,
+        password: BLUESKY_PASSWORD,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Auth failed: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+
+    // Cache session for 2 hours (tokens typically expire after 2 hours)
+    cachedSession = {
+      accessJwt: data.accessJwt,
+      refreshJwt: data.refreshJwt,
+      did: data.did,
+      expiresAt: Date.now() + 2 * 60 * 60 * 1000,
+    };
+
+    console.log('[Bluesky] Successfully authenticated');
+    return cachedSession;
+  } catch (error) {
+    console.error('[Bluesky] Authentication error:', error);
+    return null;
+  }
+}
+
+/**
+ * Get a valid access token (creates session if needed)
+ */
+async function getAccessToken(): Promise<string | null> {
+  // Return cached token if still valid
+  if (cachedSession && cachedSession.expiresAt > Date.now()) {
+    return cachedSession.accessJwt;
+  }
+
+  // Create new session
+  const session = await createSession();
+  return session?.accessJwt || null;
+}
+
+// ===========================================
 // Helper Functions
 // ===========================================
 
@@ -227,9 +306,20 @@ export async function getUserPosts(
   const { limit = 50, cursor } = options;
 
   try {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      console.error('[Bluesky] Cannot fetch posts without authentication');
+      return { posts: [] };
+    }
+
+    const headers: HeadersInit = {
+      'Authorization': `Bearer ${accessToken}`,
+    };
+
     // Resolve handle to DID
     const profileRes = await fetch(
-      `${BLUESKY_API_BASE}/xrpc/app.bsky.actor.getProfile?actor=${handle}`
+      `${BLUESKY_API_BASE}/xrpc/app.bsky.actor.getProfile?actor=${handle}`,
+      { headers }
     );
 
     if (!profileRes.ok) {
@@ -245,7 +335,7 @@ export async function getUserPosts(
       url += `&cursor=${cursor}`;
     }
 
-    const feedRes = await fetch(url);
+    const feedRes = await fetch(url, { headers });
 
     if (!feedRes.ok) {
       throw new Error(`Failed to get feed: ${feedRes.statusText}`);
@@ -300,12 +390,22 @@ export async function searchPosts(
   const { limit = 50, cursor } = options;
 
   try {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      console.error('[Bluesky] Cannot search posts without authentication');
+      return { posts: [] };
+    }
+
     let url = `${BLUESKY_API_BASE}/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(query)}&limit=${limit}`;
     if (cursor) {
       url += `&cursor=${cursor}`;
     }
 
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
 
     if (!res.ok) {
       throw new Error(`Search failed: ${res.statusText}`);
@@ -330,8 +430,15 @@ export async function searchPosts(
  */
 export async function isAvailable(): Promise<boolean> {
   try {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      return false;
+    }
+
     const res = await fetch(`${BLUESKY_API_BASE}/xrpc/app.bsky.actor.getProfile?actor=bsky.app`, {
-      method: "HEAD",
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
     });
     return res.ok;
   } catch {
