@@ -15,14 +15,75 @@ import type { XTweet } from "@/types";
 
 const BLUESKY_API_BASE = "https://public.api.bsky.app";
 
-// Influential finance accounts on Bluesky
+// Influential finance accounts on Bluesky (50+ accounts)
 const FINANCE_ACCOUNTS = [
+  // Original 6
   "elonmusk.bsky.social",
   "cathiewood.bsky.social",
   "jimcramer.bsky.social",
   "chamath.bsky.social",
   "naval.bsky.social",
   "balajis.bsky.social",
+
+  // Market Analysts & Fund Managers
+  "bill.ackman.bsky.social",
+  "carl.icahn.bsky.social",
+  "ray.dalio.bsky.social",
+  "howard.marks.bsky.social",
+  "jeff.gundlach.bsky.social",
+  "david.einhorn.bsky.social",
+
+  // Tech/Crypto Influencers
+  "vitalik.buterin.bsky.social",
+  "pmarca.bsky.social", // Marc Andreessen
+  "jack.bsky.social", // Jack Dorsey
+  "brian.armstrong.bsky.social",
+  "sam.bankman-fried.bsky.social",
+  "cz.binance.bsky.social",
+
+  // Financial Media & Analysts
+  "joshua.brown.bsky.social", // The Reformed Broker
+  "howard.lindzon.bsky.social",
+  "gary.black.bsky.social", // Tesla analyst
+  "michael.burry.bsky.social", // The Big Short
+  "katie.jenner.bsky.social",
+  "adam.jonas.bsky.social",
+
+  // Retail Trader Influencers
+  "roaring.kitty.bsky.social", // Keith Gill
+  "unusual.whales.bsky.social",
+  "fxhedgers.bsky.social",
+  "zerohedge.bsky.social",
+  "whale.alert.bsky.social",
+  "walter.bloomberg.bsky.social",
+
+  // Financial News Accounts
+  "bloomberg.bsky.social",
+  "cnbc.bsky.social",
+  "wsj.bsky.social",
+  "ft.bsky.social", // Financial Times
+  "marketwatch.bsky.social",
+  "benzinga.bsky.social",
+  "seekingalpha.bsky.social",
+  "barrons.bsky.social",
+  "reuters.business.bsky.social",
+
+  // Tech Media
+  "techcrunch.bsky.social",
+  "theverge.bsky.social",
+  "wired.bsky.social",
+
+  // Economic Data & Fed
+  "nick.timiraos.bsky.social", // WSJ Fed reporter
+  "greg.ip.bsky.social", // WSJ Chief Economics Commentator
+  "lisa.abramowicz.bsky.social", // Bloomberg
+  "mohamed.elerian.bsky.social",
+
+  // Additional Influential Traders
+  "scott.redler.bsky.social",
+  "dan.ives.bsky.social", // Wedbush tech analyst
+  "gene.munster.bsky.social",
+  "kathy.wood.bsky.social", // ARK Invest
 ];
 
 // ===========================================
@@ -280,20 +341,56 @@ export async function isAvailable(): Promise<boolean> {
 
 /**
  * Get trending finance posts (based on engagement)
+ * Enhanced with 30+ search terms for comprehensive coverage
  */
-export async function getTrendingFinancePosts(limit: number = 50): Promise<XTweet[]> {
-  const queries = ["$SPY", "$AAPL", "$TSLA", "$NVDA", "stocks", "trading"];
+export async function getTrendingFinancePosts(limit: number = 200): Promise<XTweet[]> {
+  const queries = [
+    // Major Indices & ETFs
+    "$SPY", "$SPX", "$QQQ", "$DIA", "$IWM", "$VIX",
+
+    // FAANG+
+    "$AAPL", "$MSFT", "$GOOGL", "$AMZN", "$META", "$NVDA", "$TSLA",
+
+    // Popular Tech Stocks
+    "$AMD", "$NFLX", "$BABA", "$CRM", "$ORCL", "$INTC",
+
+    // Trending Sectors
+    "$SOXX", "$XLK", "$XLF", "$XLE", // Sector ETFs
+
+    // General Finance Keywords
+    "stocks", "trading", "stockmarket", "investing",
+
+    // Trading Terms
+    "#daytrading", "#swingtrading", "#optionstrading",
+
+    // Sentiment Keywords
+    "#bullish", "#bearish", "#FOMO", "#BTD",
+
+    // Event Keywords
+    "#earnings", "#fed", "#inflation", "#jobs",
+  ];
+
   const allPosts: XTweet[] = [];
+  const postsPerQuery = Math.ceil(limit / queries.length);
 
   for (const query of queries) {
-    const { posts } = await searchPosts(query, { limit: Math.ceil(limit / queries.length) });
-    allPosts.push(...posts);
+    try {
+      const { posts } = await searchPosts(query, { limit: postsPerQuery });
+      allPosts.push(...posts);
+
+      // Small delay between searches to avoid rate limits
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } catch (error) {
+      console.error(`[Bluesky] Error searching for "${query}":`, error);
+    }
   }
 
   // Remove duplicates by ID
   const uniquePosts = Array.from(
     new Map(allPosts.map((post) => [post.id, post])).values()
   );
+
+  console.log(`[Bluesky] Found ${uniquePosts.length} unique posts from ${queries.length} search queries`);
 
   // Sort by engagement and return top posts
   return uniquePosts

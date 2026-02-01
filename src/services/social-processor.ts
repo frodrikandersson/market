@@ -334,8 +334,8 @@ export async function fetchBlueskyPosts(): Promise<{
   }
 
   try {
-    // Fetch trending finance posts
-    const posts = await bluesky.getTrendingFinancePosts(50);
+    // Fetch trending finance posts with expanded hashtag search (30+ search terms)
+    const posts = await bluesky.getTrendingFinancePosts(200);
     result.postsFound = posts.length;
 
     for (const post of posts) {

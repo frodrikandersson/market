@@ -17,10 +17,28 @@
 
 // Subreddit configurations with weights
 export const SUBREDDIT_CONFIG = {
+  // Original 4 - High Volume
   wallstreetbets: { name: 'r/WallStreetBets', weight: 0.8, skipFlairs: ['Daily Discussion', 'Weekend Discussion'] },
   stocks: { name: 'r/stocks', weight: 0.7, skipFlairs: ['Rate My Portfolio', 'Advice Request'] },
   investing: { name: 'r/investing', weight: 0.6, skipFlairs: ['Daily Discussion'] },
   options: { name: 'r/options', weight: 0.7, skipFlairs: ['Daily Discussion'] },
+
+  // Active Trading - High Activity
+  Daytrading: { name: 'r/Daytrading', weight: 0.75, skipFlairs: ['Daily Discussion'] },
+  SwingTrading: { name: 'r/SwingTrading', weight: 0.7, skipFlairs: [] },
+  pennystocks: { name: 'r/pennystocks', weight: 0.6, skipFlairs: ['Daily Discussion'] },
+  StockMarket: { name: 'r/StockMarket', weight: 0.7, skipFlairs: ['Daily Discussion', 'Advice'] },
+
+  // Value & Strategy Focused
+  ValueInvesting: { name: 'r/ValueInvesting', weight: 0.65, skipFlairs: [] },
+  Dividends: { name: 'r/Dividends', weight: 0.65, skipFlairs: ['Rate My Portfolio'] },
+  Bogleheads: { name: 'r/Bogleheads', weight: 0.6, skipFlairs: [] },
+
+  // Sector-Specific
+  TechStocks: { name: 'r/TechStocks', weight: 0.7, skipFlairs: [] },
+  Semiconductors: { name: 'r/Semiconductors', weight: 0.7, skipFlairs: [] },
+  electricvehicles: { name: 'r/electricvehicles', weight: 0.7, skipFlairs: ['Meme'] },
+  Biotechplays: { name: 'r/Biotechplays', weight: 0.65, skipFlairs: [] },
 } as const;
 
 export type SubredditName = keyof typeof SUBREDDIT_CONFIG;
@@ -498,15 +516,20 @@ async function fetchSubreddit(
 /**
  * Fetch from a single subreddit with multiple sort types
  */
-async function fetchFromSubreddit(subreddit: SubredditName, limit: number = 25): Promise<RedditPost[]> {
+async function fetchFromSubreddit(subreddit: SubredditName, limit: number = 30): Promise<RedditPost[]> {
   const allPosts: RedditPost[] = [];
   const seenIds = new Set<string>();
 
-  const sortTypes: Array<'hot' | 'new' | 'rising'> = ['hot', 'new'];
+  // Fetch from hot (30), new (30), and rising (20) to maximize coverage
+  const sortTypes: Array<{ type: 'hot' | 'new' | 'rising'; limit: number }> = [
+    { type: 'hot', limit: 30 },
+    { type: 'new', limit: 30 },
+    { type: 'rising', limit: 20 },
+  ];
 
-  for (const sortType of sortTypes) {
+  for (const { type: sortType, limit: sortLimit } of sortTypes) {
     try {
-      const posts = await fetchSubreddit(subreddit, sortType, limit);
+      const posts = await fetchSubreddit(subreddit, sortType, sortLimit);
 
       for (const post of posts) {
         if (!seenIds.has(post.id)) {
@@ -522,6 +545,7 @@ async function fetchFromSubreddit(subreddit: SubredditName, limit: number = 25):
     }
   }
 
+  console.log(`[Reddit] r/${subreddit}: Fetched ${allPosts.length} unique posts across all sort types`);
   return allPosts;
 }
 
