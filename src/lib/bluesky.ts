@@ -341,12 +341,13 @@ export async function isAvailable(): Promise<boolean> {
 
 /**
  * Get trending finance posts (based on engagement)
- * Enhanced with 30+ search terms for comprehensive coverage
+ * EXPANDED: 40+ → 80+ search terms for comprehensive coverage
  */
 export async function getTrendingFinancePosts(limit: number = 200): Promise<XTweet[]> {
   const queries = [
     // Major Indices & ETFs
     "$SPY", "$SPX", "$QQQ", "$DIA", "$IWM", "$VIX",
+    "$TQQQ", "$SQQQ", "$ARKK", "$SOXX", "$SMH",
 
     // FAANG+
     "$AAPL", "$MSFT", "$GOOGL", "$AMZN", "$META", "$NVDA", "$TSLA",
@@ -354,20 +355,49 @@ export async function getTrendingFinancePosts(limit: number = 200): Promise<XTwe
     // Popular Tech Stocks
     "$AMD", "$NFLX", "$BABA", "$CRM", "$ORCL", "$INTC",
 
-    // Trending Sectors
-    "$SOXX", "$XLK", "$XLF", "$XLE", // Sector ETFs
+    // Trending Tech/Growth Stocks (NEW)
+    "$COIN", "$SQ", "$SHOP", "$PLTR", "$RBLX",
+    "$UBER", "$ABNB", "$SNOW", "$NET", "$DDOG",
+    "$CRWD", "$PANW", "$ZS", "$OKTA", "$MDB",
+
+    // Meme/Retail Favorites (NEW)
+    "$GME", "$AMC", "$BB", "$NOK", "$HOOD",
+
+    // Sector ETFs
+    "$XLK", "$XLF", "$XLE", "$XLV", "$XLI",
+    "$VGT", "$VOO", "$VTI",
 
     // General Finance Keywords
     "stocks", "trading", "stockmarket", "investing",
+    "stock market", "wall street", "nasdaq", "dow jones",
 
     // Trading Terms
     "#daytrading", "#swingtrading", "#optionstrading",
+    "#daytrader", "#scalping", "#momentum",
+
+    // Investment Styles (NEW)
+    "#valuestock", "#growthstock", "#dividends",
+    "#passiveincome", "#fire", "#investing101",
 
     // Sentiment Keywords
     "#bullish", "#bearish", "#FOMO", "#BTD",
+    "#bullmarket", "#bearmarket", "#marketrally",
+
+    // Sector Tags (NEW)
+    "#technology", "#AI", "#semiconductor", "#fintech",
+    "#biotech", "#EV", "#cleanenergy", "#crypto",
 
     // Event Keywords
     "#earnings", "#fed", "#inflation", "#jobs",
+    "#earningsseason", "#fomc", "#cpi", "#gdp",
+
+    // Market Events (NEW)
+    "#opex", "#quadwitching", "#marketclose",
+    "#premarket", "#afterhours", "#marketopen",
+
+    // Popular Market Terms (NEW)
+    "short squeeze", "gamma squeeze", "market crash",
+    "all time high", "correction", "recession",
   ];
 
   const allPosts: XTweet[] = [];

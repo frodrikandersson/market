@@ -15,7 +15,7 @@
  *   const posts = await reddit.fetchAllSubreddits();
  */
 
-// Subreddit configurations with weights
+// Subreddit configurations with weights (EXPANDED: 15 → 33 subreddits)
 export const SUBREDDIT_CONFIG = {
   // Original 4 - High Volume
   wallstreetbets: { name: 'r/WallStreetBets', weight: 0.8, skipFlairs: ['Daily Discussion', 'Weekend Discussion'] },
@@ -39,6 +39,38 @@ export const SUBREDDIT_CONFIG = {
   Semiconductors: { name: 'r/Semiconductors', weight: 0.7, skipFlairs: [] },
   electricvehicles: { name: 'r/electricvehicles', weight: 0.7, skipFlairs: ['Meme'] },
   Biotechplays: { name: 'r/Biotechplays', weight: 0.65, skipFlairs: [] },
+
+  // === NEW ADDITIONS (+18 subreddits) ===
+
+  // High-Activity Trading (100K+ members)
+  SPACs: { name: 'r/SPACs', weight: 0.65, skipFlairs: ['Daily Discussion'] },
+  thetagang: { name: 'r/thetagang', weight: 0.7, skipFlairs: ['Daily Thread'] },
+  OptionsMillionaire: { name: 'r/OptionsMillionaire', weight: 0.65, skipFlairs: [] },
+  smallstreetbets: { name: 'r/smallstreetbets', weight: 0.7, skipFlairs: ['Daily Discussion'] },
+
+  // Stock-Specific Communities
+  teslainvestorsclub: { name: 'r/teslainvestorsclub', weight: 0.75, skipFlairs: ['Daily Thread'] },
+  AMD_Stock: { name: 'r/AMD_Stock', weight: 0.7, skipFlairs: [] },
+  NVDA_Stock: { name: 'r/NVDA_Stock', weight: 0.7, skipFlairs: [] },
+  PLTR: { name: 'r/PLTR', weight: 0.65, skipFlairs: [] },
+
+  // Meme Stock Tracking (high retail sentiment)
+  GME: { name: 'r/GME', weight: 0.6, skipFlairs: [] },
+  amcstock: { name: 'r/amcstock', weight: 0.6, skipFlairs: [] },
+
+  // Analysis & Research
+  SecurityAnalysis: { name: 'r/SecurityAnalysis', weight: 0.75, skipFlairs: [] },
+  FundamentalAnalysis: { name: 'r/FundamentalAnalysis', weight: 0.7, skipFlairs: [] },
+  EducatedInvesting: { name: 'r/EducatedInvesting', weight: 0.7, skipFlairs: [] },
+
+  // Crypto-Adjacent (affects tech stocks)
+  CryptoCurrency: { name: 'r/CryptoCurrency', weight: 0.65, skipFlairs: ['Daily Discussion'] },
+  Bitcoin: { name: 'r/Bitcoin', weight: 0.6, skipFlairs: ['Daily Discussion'] },
+  ethereum: { name: 'r/ethereum', weight: 0.6, skipFlairs: ['Daily Discussion'] },
+
+  // International Markets
+  UKInvesting: { name: 'r/UKInvesting', weight: 0.6, skipFlairs: [] },
+  CanadianInvestor: { name: 'r/CanadianInvestor', weight: 0.6, skipFlairs: [] },
 } as const;
 
 export type SubredditName = keyof typeof SUBREDDIT_CONFIG;

@@ -12,6 +12,7 @@
 import { db } from '@/lib/db';
 import { newsapi } from '@/lib/newsapi';
 import { finnhub } from '@/lib/finnhub';
+import { rss } from '@/lib/rss';
 import { gemini } from '@/lib/gemini';
 import { companyDiscovery } from '@/services/company-discovery';
 import type {
@@ -84,6 +85,24 @@ function normalizeFinnhubArticle(article: FinnhubNewsArticle): ProcessedArticle 
     imageUrl: article.image || null,
     author: null,
     publishedAt: new Date(article.datetime * 1000),
+    analysis: null,
+  };
+}
+
+/**
+ * Convert RSS article to our format
+ */
+function normalizeRSSArticle(article: NewsAPIArticle): ProcessedArticle {
+  return {
+    sourceId: 'rss',
+    externalId: null,
+    title: article.title,
+    content: article.content || article.description,
+    summary: null,
+    url: article.url,
+    imageUrl: article.urlToImage,
+    author: article.author,
+    publishedAt: new Date(article.publishedAt),
     analysis: null,
   };
 }
@@ -179,6 +198,16 @@ export async function fetchAllNews(): Promise<ProcessedArticle[]> {
     } catch (error) {
       console.error(`[Finnhub] Failed to fetch news for ${ticker}:`, error);
     }
+  }
+
+  // Fetch from RSS feeds (unlimited, no API rate limits!)
+  try {
+    console.log('[RSS] Starting feed fetch...');
+    const rssArticles = await rss.fetchAllFeeds();
+    articles.push(...rssArticles.map(normalizeRSSArticle));
+    console.log(`[RSS] Fetched ${rssArticles.length} articles from all feeds`);
+  } catch (error) {
+    console.error('[RSS] Failed to fetch RSS feeds:', error);
   }
 
   // Deduplicate

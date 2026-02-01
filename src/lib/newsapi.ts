@@ -136,8 +136,9 @@ export async function getBusinessNews(options: {
   to?: string;
   pageSize?: number;
 } = {}): Promise<NewsAPIArticle[]> {
-  // Focus on reliable financial news sources
+  // Expanded reliable financial news sources (7 → 27 domains)
   const reliableDomains = [
+    // Original Core Financial News
     'reuters.com',
     'bloomberg.com',
     'wsj.com',
@@ -145,13 +146,39 @@ export async function getBusinessNews(options: {
     'marketwatch.com',
     'ft.com',
     'barrons.com',
+
+    // Additional Financial News
+    'seekingalpha.com',
+    'benzinga.com',
+    'investors.com',          // Investor's Business Daily
+    'fool.com',               // Motley Fool
+    'morningstar.com',
+    'thestreet.com',
+    'investopedia.com',
+
+    // Tech/Business News
+    'techcrunch.com',
+    'theverge.com',
+    'arstechnica.com',
+    'wired.com',
+    'businessinsider.com',
+    'forbes.com',
+    'fortune.com',
+
+    // Economic News
+    'economist.com',
+
+    // Crypto/Tech Finance (impacts tech stocks)
+    'coindesk.com',
+    'cointelegraph.com',
+    'decrypt.co',
   ].join(',');
 
-  return searchNews('stock OR market OR earnings OR trading', {
+  return searchNews('stock OR market OR earnings OR trading OR IPO OR acquisition OR dividend', {
     domains: reliableDomains,
     from: options.from,
     to: options.to,
-    pageSize: options.pageSize || 50,
+    pageSize: options.pageSize || 100, // Increased from 50 to 100
     sortBy: 'publishedAt',
   });
 }
