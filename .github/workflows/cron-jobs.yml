@@ -26,6 +26,7 @@ on:
           - backlog-processor
           - run-predictions
           - track-predictions
+          - auto-trader
           - all
 
 jobs:
@@ -64,7 +65,7 @@ jobs:
         run: |
           echo "Processing backlog with AI..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 600 \
+          response=$(curl -s -w "\n%{http_code}" -m 1800 \
             "${{ secrets.APP_URL }}/api/cron/backlog-processor?secret=${{ secrets.CRON_SECRET }}")
 
           http_code=$(echo "$response" | tail -n1)
@@ -128,3 +129,28 @@ jobs:
           fi
 
           echo "✓ Prediction tracking completed successfully"
+
+  auto-trader:
+    runs-on: ubuntu-latest
+    # Run daily at 5:15 PM ET (after predictions are generated)
+    if: github.event.schedule == '15 22 * * *' || github.event.inputs.job == 'auto-trader' || github.event.inputs.job == 'all'
+
+    steps:
+      - name: Execute Auto-Trading
+        run: |
+          echo "Executing AI auto-trading for all models..."
+
+          response=$(curl -s -w "\n%{http_code}" -m 300 -X POST \
+            "${{ secrets.APP_URL }}/api/auto-trader")
+
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+
+          echo "Response: $body"
+
+          if [ "$http_code" -ne 200 ]; then
+            echo "Error: HTTP $http_code"
+            exit 1
+          fi
+
+          echo "✓ Auto-trading completed successfully"

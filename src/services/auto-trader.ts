@@ -36,13 +36,39 @@ const PORTFOLIO_CONFIG: Record<ModelType, { name: string; description: string }>
   },
 };
 
-// Configuration
+// Model-specific configurations
+const MODEL_CONFIGS: Record<ModelType, {
+  MIN_CONFIDENCE: number;
+  HIGH_CONFIDENCE: number;
+  POSITION_SIZE_NORMAL: number;
+  POSITION_SIZE_HIGH: number;
+  MAX_POSITIONS: number;
+}> = {
+  fundamentals: {
+    MIN_CONFIDENCE: 0.65,      // Conservative: News-based signals
+    HIGH_CONFIDENCE: 0.80,
+    POSITION_SIZE_NORMAL: 0.05, // 5% per position
+    POSITION_SIZE_HIGH: 0.08,   // 8% for high confidence
+    MAX_POSITIONS: 10,          // Quality over quantity
+  },
+  hype: {
+    MIN_CONFIDENCE: 0.55,       // Aggressive: Social media signals
+    HIGH_CONFIDENCE: 0.75,
+    POSITION_SIZE_NORMAL: 0.03, // 3% per position (smaller = risk mgmt)
+    POSITION_SIZE_HIGH: 0.05,   // 5% for high confidence
+    MAX_POSITIONS: 15,          // More positions = diversification
+  },
+  combined: {
+    MIN_CONFIDENCE: 0.60,       // Balanced: Both models agree
+    HIGH_CONFIDENCE: 0.78,
+    POSITION_SIZE_NORMAL: 0.06, // 6% per position
+    POSITION_SIZE_HIGH: 0.09,   // 9% for high confidence
+    MAX_POSITIONS: 8,           // Fewer, higher conviction
+  },
+};
+
+// Shared configuration (same for all models)
 const CONFIG = {
-  MIN_CONFIDENCE: 0.65,
-  HIGH_CONFIDENCE: 0.80,
-  POSITION_SIZE_NORMAL: 0.05,
-  POSITION_SIZE_HIGH: 0.08,
-  MAX_POSITIONS: 10,
   MAX_SINGLE_POSITION: 0.15,
   PROFIT_TARGET: 0.05,
   STOP_LOSS: -0.03,
@@ -143,13 +169,13 @@ async function analyzePredictionsForModel(modelType: ModelType): Promise<TradeDe
   const decisions: TradeDecision[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const modelConfig = MODEL_CONFIGS[modelType];
 
   if (modelType === 'combined') {
     // For combined, find stocks where both models agree
     const predictions = await prisma.prediction.findMany({
       where: {
         predictionDate: { gte: today },
-        confidence: { gte: CONFIG.MIN_CONFIDENCE },
       },
       include: { company: true },
     });
@@ -170,18 +196,22 @@ async function analyzePredictionsForModel(modelType: ModelType): Promise<TradeDe
       if (fundamentals && hype &&
           fundamentals.predictedDirection === 'up' &&
           hype.predictedDirection === 'up' &&
-          fundamentals.confidence >= CONFIG.MIN_CONFIDENCE &&
-          hype.confidence >= CONFIG.MIN_CONFIDENCE) {
+          fundamentals.confidence >= MODEL_CONFIGS.fundamentals.MIN_CONFIDENCE &&
+          hype.confidence >= MODEL_CONFIGS.hype.MIN_CONFIDENCE) {
 
         const avgConfidence = (fundamentals.confidence + hype.confidence) / 2;
-        decisions.push({
-          ticker: fundamentals.company.ticker,
-          companyId,
-          action: 'buy',
-          reason: `Both models agree UP (F: ${(fundamentals.confidence * 100).toFixed(0)}%, H: ${(hype.confidence * 100).toFixed(0)}%)`,
-          confidence: avgConfidence,
-          modelType: 'combined',
-        });
+
+        // Only include if average meets combined threshold
+        if (avgConfidence >= modelConfig.MIN_CONFIDENCE) {
+          decisions.push({
+            ticker: fundamentals.company.ticker,
+            companyId,
+            action: 'buy',
+            reason: `Both models agree UP (F: ${(fundamentals.confidence * 100).toFixed(0)}%, H: ${(hype.confidence * 100).toFixed(0)}%)`,
+            confidence: avgConfidence,
+            modelType: 'combined',
+          });
+        }
       }
     }
   } else {
@@ -190,7 +220,7 @@ async function analyzePredictionsForModel(modelType: ModelType): Promise<TradeDe
       where: {
         predictionDate: { gte: today },
         modelType: modelType,
-        confidence: { gte: CONFIG.MIN_CONFIDENCE },
+        confidence: { gte: modelConfig.MIN_CONFIDENCE },
         predictedDirection: 'up',
       },
       include: { company: true },
@@ -325,8 +355,9 @@ async function executeBuy(
     }
 
     const price = quote.c;
-    const isHighConfidence = decision.confidence >= CONFIG.HIGH_CONFIDENCE;
-    const positionPercent = isHighConfidence ? CONFIG.POSITION_SIZE_HIGH : CONFIG.POSITION_SIZE_NORMAL;
+    const modelConfig = MODEL_CONFIGS[decision.modelType];
+    const isHighConfidence = decision.confidence >= modelConfig.HIGH_CONFIDENCE;
+    const positionPercent = isHighConfidence ? modelConfig.POSITION_SIZE_HIGH : modelConfig.POSITION_SIZE_NORMAL;
 
     let tradeValue = portfolioValue * positionPercent;
 
@@ -494,7 +525,8 @@ async function executeForModel(modelType: ModelType): Promise<PortfolioResult> {
     const updatedValue = await calculatePortfolioValue(updatedPortfolio);
 
     // Check position limit
-    if (updatedPortfolio.positions.length < CONFIG.MAX_POSITIONS) {
+    const modelConfig = MODEL_CONFIGS[modelType];
+    if (updatedPortfolio.positions.length < modelConfig.MAX_POSITIONS) {
       const buyDecisions = await analyzePredictionsForModel(modelType);
 
       // Filter out existing positions at max
@@ -507,7 +539,7 @@ async function executeForModel(modelType: ModelType): Promise<PortfolioResult> {
 
       result.decisions.push(...filteredBuys);
 
-      const slotsAvailable = CONFIG.MAX_POSITIONS - updatedPortfolio.positions.length;
+      const slotsAvailable = modelConfig.MAX_POSITIONS - updatedPortfolio.positions.length;
       const buysToExecute = filteredBuys.slice(0, slotsAvailable);
 
       for (const decision of buysToExecute) {
@@ -625,5 +657,6 @@ export const autoTrader = {
   getPortfolioStatus,
   getAllStatus,
   CONFIG,
+  MODEL_CONFIGS,
   PORTFOLIO_CONFIG,
 };
