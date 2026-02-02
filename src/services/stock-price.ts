@@ -205,9 +205,36 @@ export async function fetchPricesPrioritized(limit: number = 60): Promise<FetchP
         );
         result.fetched++;
         console.log(`[StockPrice] ${company.ticker}: $${quote.price.toFixed(2)} (${quote.changePercent >= 0 ? '+' : ''}${quote.changePercent.toFixed(2)}%)`);
+
+        // Reset failure counter on success
+        await db.company.update({
+          where: { id: company.id },
+          data: {
+            priceCheckFailures: 0,
+            lastPriceCheckAt: new Date(),
+          },
+        });
       } else {
         result.failed++;
         result.errors.push(`${company.ticker}: No valid quote`);
+
+        // Increment failure counter
+        const updatedCompany = await db.company.update({
+          where: { id: company.id },
+          data: {
+            priceCheckFailures: { increment: 1 },
+            lastPriceCheckAt: new Date(),
+          },
+        });
+
+        // Blacklist after 5 failures
+        if (updatedCompany.priceCheckFailures >= 5) {
+          await db.company.update({
+            where: { id: company.id },
+            data: { isActive: false },
+          });
+          console.warn(`[StockPrice] ⚠️  BLACKLISTED ${company.ticker} after ${updatedCompany.priceCheckFailures} failed price checks`);
+        }
       }
 
       // Yahoo Finance has no official rate limit, but be respectful
@@ -216,6 +243,24 @@ export async function fetchPricesPrioritized(limit: number = 60): Promise<FetchP
       result.failed++;
       const errorMsg = error instanceof Error ? error.message : String(error);
       result.errors.push(`${company.ticker}: ${errorMsg}`);
+
+      // Increment failure counter on exception
+      const updatedCompany = await db.company.update({
+        where: { id: company.id },
+        data: {
+          priceCheckFailures: { increment: 1 },
+          lastPriceCheckAt: new Date(),
+        },
+      });
+
+      // Blacklist after 5 failures
+      if (updatedCompany.priceCheckFailures >= 5) {
+        await db.company.update({
+          where: { id: company.id },
+          data: { isActive: false },
+        });
+        console.warn(`[StockPrice] ⚠️  BLACKLISTED ${company.ticker} after ${updatedCompany.priceCheckFailures} failed price checks`);
+      }
     }
   }
 
@@ -263,9 +308,36 @@ export async function fetchAllPrices(): Promise<FetchPricesResult> {
         );
         result.fetched++;
         console.log(`[StockPrice] ${company.ticker}: $${quote.price.toFixed(2)} (${quote.changePercent >= 0 ? '+' : ''}${quote.changePercent.toFixed(2)}%)`);
+
+        // Reset failure counter on success
+        await db.company.update({
+          where: { id: company.id },
+          data: {
+            priceCheckFailures: 0,
+            lastPriceCheckAt: new Date(),
+          },
+        });
       } else {
         result.failed++;
         result.errors.push(`${company.ticker}: No valid quote`);
+
+        // Increment failure counter
+        const updatedCompany = await db.company.update({
+          where: { id: company.id },
+          data: {
+            priceCheckFailures: { increment: 1 },
+            lastPriceCheckAt: new Date(),
+          },
+        });
+
+        // Blacklist after 5 failures
+        if (updatedCompany.priceCheckFailures >= 5) {
+          await db.company.update({
+            where: { id: company.id },
+            data: { isActive: false },
+          });
+          console.warn(`[StockPrice] ⚠️  BLACKLISTED ${company.ticker} after ${updatedCompany.priceCheckFailures} failed price checks`);
+        }
       }
 
       // Yahoo Finance has no official rate limit, but be respectful
@@ -274,6 +346,24 @@ export async function fetchAllPrices(): Promise<FetchPricesResult> {
       result.failed++;
       const errorMsg = error instanceof Error ? error.message : String(error);
       result.errors.push(`${company.ticker}: ${errorMsg}`);
+
+      // Increment failure counter on exception
+      const updatedCompany = await db.company.update({
+        where: { id: company.id },
+        data: {
+          priceCheckFailures: { increment: 1 },
+          lastPriceCheckAt: new Date(),
+        },
+      });
+
+      // Blacklist after 5 failures
+      if (updatedCompany.priceCheckFailures >= 5) {
+        await db.company.update({
+          where: { id: company.id },
+          data: { isActive: false },
+        });
+        console.warn(`[StockPrice] ⚠️  BLACKLISTED ${company.ticker} after ${updatedCompany.priceCheckFailures} failed price checks`);
+      }
     }
   }
 

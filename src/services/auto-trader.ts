@@ -151,7 +151,7 @@ async function calculatePortfolioValue(portfolio: PortfolioWithRelations): Promi
   for (const position of portfolio.positions) {
     try {
       const quote = await yahoofinance.getQuote(position.ticker);
-      if (quote.regularMarketPrice > 0) {
+      if (quote && quote.regularMarketPrice > 0) {
         positionsValue += position.shares * quote.regularMarketPrice;
       }
     } catch {
@@ -256,7 +256,7 @@ async function checkSellSignals(
   for (const position of portfolio.positions) {
     try {
       const quote = await yahoofinance.getQuote(position.ticker);
-      if (!quote.regularMarketPrice || quote.regularMarketPrice <= 0) continue;
+      if (!quote || !quote.regularMarketPrice || quote.regularMarketPrice <= 0) continue;
 
       const currentPrice = quote.regularMarketPrice;
       const gainLossPercent = (currentPrice - position.avgCost) / position.avgCost;
@@ -349,7 +349,7 @@ async function executeBuy(
 ): Promise<boolean> {
   try {
     const quote = await yahoofinance.getQuote(decision.ticker);
-    if (!quote.regularMarketPrice || quote.regularMarketPrice <= 0) {
+    if (!quote || !quote.regularMarketPrice || quote.regularMarketPrice <= 0) {
       console.error(`[AUTO-TRADER] Invalid price for ${decision.ticker}`);
       return false;
     }
@@ -445,7 +445,7 @@ async function executeSell(
     if (!position) return false;
 
     const quote = await yahoofinance.getQuote(decision.ticker);
-    if (!quote.regularMarketPrice || quote.regularMarketPrice <= 0) return false;
+    if (!quote || !quote.regularMarketPrice || quote.regularMarketPrice <= 0) return false;
 
     const price = quote.regularMarketPrice;
     const sharesToSell = decision.suggestedShares || position.shares;
@@ -600,7 +600,7 @@ async function getPortfolioStatus(modelType: ModelType) {
     portfolio.positions.map(async (pos) => {
       try {
         const quote = await yahoofinance.getQuote(pos.ticker);
-        const currentPrice = quote.regularMarketPrice || pos.avgCost;
+        const currentPrice = quote?.regularMarketPrice || pos.avgCost;
         const marketValue = pos.shares * currentPrice;
         const gainLoss = marketValue - (pos.shares * pos.avgCost);
         const gainLossPercent = (currentPrice - pos.avgCost) / pos.avgCost * 100;

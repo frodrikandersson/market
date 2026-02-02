@@ -29,6 +29,10 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Price check failure tracking
+  priceCheckFailures Int      @default(0) /// Consecutive failed price checks
+  lastPriceCheckAt   DateTime? /// Last time price check was attempted
+
   // Relations
   stockPrices    StockPrice[]
   newsImpacts    NewsImpact[]
