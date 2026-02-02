@@ -77,7 +77,7 @@ export async function fetchQuotes(tickers: string[]): Promise<Map<string, StockP
       results.set(ticker, quote);
     }
     // Rate limit: 60 calls/min = 1 per second max
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
   return results;
@@ -126,7 +126,106 @@ export async function storeDailyPrice(
 }
 
 /**
+ * Fetch and store prices with smart prioritization
+ * Priority 1: Companies with no prices yet
+ * Priority 2: Companies with oldest prices (needs update)
+ */
+export async function fetchPricesPrioritized(limit: number = 60): Promise<FetchPricesResult> {
+  const result: FetchPricesResult = {
+    fetched: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  // Priority 1: Companies with no price data at all
+  const companiesNoPrices = await db.company.findMany({
+    where: {
+      isActive: true,
+      stockPrices: { none: {} },
+    },
+    select: { id: true, ticker: true },
+    take: limit,
+  });
+
+  // Priority 2: Companies with oldest prices (if we have budget left)
+  let companiesOldPrices: Array<{ id: string; ticker: string }> = [];
+  if (companiesNoPrices.length < limit) {
+    const remaining = limit - companiesNoPrices.length;
+
+    // Get companies ordered by oldest price date
+    const companiesWithPrices = await db.company.findMany({
+      where: {
+        isActive: true,
+        stockPrices: { some: {} },
+      },
+      select: {
+        id: true,
+        ticker: true,
+        stockPrices: {
+          orderBy: { date: 'desc' },
+          take: 1,
+          select: { date: true },
+        },
+      },
+    });
+
+    // Sort by oldest price date
+    companiesOldPrices = companiesWithPrices
+      .sort((a, b) => {
+        const dateA = a.stockPrices[0]?.date.getTime() ?? 0;
+        const dateB = b.stockPrices[0]?.date.getTime() ?? 0;
+        return dateA - dateB; // Oldest first
+      })
+      .slice(0, remaining)
+      .map(c => ({ id: c.id, ticker: c.ticker }));
+  }
+
+  const companies = [...companiesNoPrices, ...companiesOldPrices];
+
+  console.log(`[StockPrice] Fetching ${companies.length} prices (${companiesNoPrices.length} new, ${companiesOldPrices.length} updates)`);
+
+  // Use UTC for consistent date handling
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+  for (const company of companies) {
+    try {
+      const quote = await fetchQuote(company.ticker);
+
+      if (quote) {
+        // Store as today's price
+        await storeDailyPrice(
+          company.id,
+          today,
+          quote.open,
+          quote.high,
+          quote.low,
+          quote.price,
+          BigInt(0) // Volume not available from quote endpoint
+        );
+        result.fetched++;
+        console.log(`[StockPrice] ${company.ticker}: $${quote.price.toFixed(2)} (${quote.changePercent >= 0 ? '+' : ''}${quote.changePercent.toFixed(2)}%)`);
+      } else {
+        result.failed++;
+        result.errors.push(`${company.ticker}: No valid quote`);
+      }
+
+      // Rate limit delay: 60 calls/min = 1 second per call
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    } catch (error) {
+      result.failed++;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      result.errors.push(`${company.ticker}: ${errorMsg}`);
+    }
+  }
+
+  console.log(`[StockPrice] Fetched ${result.fetched}, failed ${result.failed}`);
+  return result;
+}
+
+/**
  * Fetch and store prices for all active companies
+ * (Legacy function for backward compatibility - used by run-predictions)
  */
 export async function fetchAllPrices(): Promise<FetchPricesResult> {
   const result: FetchPricesResult = {
@@ -169,8 +268,8 @@ export async function fetchAllPrices(): Promise<FetchPricesResult> {
         result.errors.push(`${company.ticker}: No valid quote`);
       }
 
-      // Rate limit delay
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Rate limit delay: 60 calls/min = 1 second per call
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     } catch (error) {
       result.failed++;
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -299,6 +398,7 @@ export const stockPriceService = {
   fetchQuote,
   fetchQuotes,
   storeDailyPrice,
+  fetchPricesPrioritized,
   fetchAllPrices,
   getLatestPrice,
   getPriceChange,
