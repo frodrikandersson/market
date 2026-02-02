@@ -468,81 +468,126 @@ function detectSentiment(text: string): 'positive' | 'negative' | 'neutral' {
 }
 
 /**
- * Fetch posts from a subreddit
+ * Sleep helper for rate limiting
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch posts from a subreddit with retry logic
  */
 async function fetchSubreddit(
   subreddit: SubredditName,
   sortBy: 'hot' | 'new' | 'top' | 'rising' = 'hot',
-  limit: number = 50
+  limit: number = 50,
+  retries: number = 3
 ): Promise<RedditPost[]> {
   const config = SUBREDDIT_CONFIG[subreddit];
   const url = `https://www.reddit.com/r/${subreddit}/${sortBy}.json?limit=${limit}&raw_json=1`;
 
-  console.log(`[Reddit] Fetching r/${subreddit}/${sortBy}...`);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[Reddit] Fetching r/${subreddit}/${sortBy}... (attempt ${attempt}/${retries})`);
 
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'MarketPredictor/1.0 (by /u/market_predictor_bot)',
-      Accept: 'application/json',
-    },
-  });
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'MarketPredictor/1.0 (by /u/market_predictor_bot)',
+          Accept: 'application/json',
+        },
+      });
 
-  if (!response.ok) {
-    throw new Error(`Reddit API error: ${response.status} ${response.statusText}`);
+      if (!response.ok) {
+        // Handle rate limiting with exponential backoff
+        if (response.status === 429) {
+          if (attempt < retries) {
+            const backoffTime = Math.min(2000 * Math.pow(2, attempt), 30000); // Max 30s
+            console.log(`[Reddit] Rate limited (429). Waiting ${backoffTime}ms before retry...`);
+            await sleep(backoffTime);
+            continue;
+          }
+        }
+        throw new Error(`Reddit API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data: RedditAPIListing = await response.json();
+
+      const posts: RedditPost[] = [];
+
+      for (const child of data.data.children) {
+        const post = child.data;
+
+        // Skip posts with certain flairs based on subreddit config
+        if (post.link_flair_text && (config.skipFlairs as readonly string[]).includes(post.link_flair_text)) {
+          continue;
+        }
+
+        // Combine title and selftext for analysis
+        const fullText = `${post.title}\n\n${post.selftext || ''}`;
+
+        // Extract tickers
+        const tickers = extractTickers(fullText);
+
+        // Only include posts that mention at least one ticker
+        if (tickers.length === 0) {
+          continue;
+        }
+
+        // Detect sentiment
+        let sentiment = detectSentiment(fullText);
+
+        // Boost positive sentiment for highly upvoted posts (varies by subreddit)
+        const upvoteThreshold = subreddit === 'wallstreetbets' ? 1000 : 500;
+        if (post.score > upvoteThreshold && sentiment === 'neutral') {
+          sentiment = 'positive';
+        }
+
+        posts.push({
+          id: `${subreddit}_${post.id}`, // Prefix with subreddit for uniqueness
+          subreddit,
+          title: post.title,
+          content: post.selftext?.substring(0, 2000) || '', // Limit content length
+          author: post.author,
+          score: post.score,
+          upvoteRatio: post.upvote_ratio,
+          commentCount: post.num_comments,
+          createdAt: new Date(post.created_utc * 1000),
+          permalink: `https://reddit.com${post.permalink}`,
+          flair: post.link_flair_text,
+          tickers,
+          sentiment,
+        });
+      }
+
+      console.log(`[Reddit] r/${subreddit}: Found ${posts.length} posts with ticker mentions from ${data.data.children.length} total`);
+
+      return posts;
+    } catch (error: any) {
+      // Handle rate limiting errors
+      if (error?.message?.includes('429') || error?.message?.includes('Too Many Requests')) {
+        if (attempt < retries) {
+          const backoffTime = Math.min(2000 * Math.pow(2, attempt), 30000);
+          console.log(`[Reddit] Rate limit error. Waiting ${backoffTime}ms before retry...`);
+          await sleep(backoffTime);
+          continue;
+        }
+      }
+
+      // On final attempt or non-rate-limit error, throw
+      if (attempt === retries) {
+        console.error(`[Reddit] Failed to fetch r/${subreddit}/${sortBy} after ${retries} attempts:`, error);
+        throw error;
+      }
+
+      // For other errors, retry with shorter backoff
+      const backoffTime = Math.min(1000 * attempt, 5000);
+      console.log(`[Reddit] Error on attempt ${attempt}. Retrying in ${backoffTime}ms...`);
+      await sleep(backoffTime);
+    }
   }
 
-  const data: RedditAPIListing = await response.json();
-
-  const posts: RedditPost[] = [];
-
-  for (const child of data.data.children) {
-    const post = child.data;
-
-    // Skip posts with certain flairs based on subreddit config
-    if (post.link_flair_text && (config.skipFlairs as readonly string[]).includes(post.link_flair_text)) {
-      continue;
-    }
-
-    // Combine title and selftext for analysis
-    const fullText = `${post.title}\n\n${post.selftext || ''}`;
-
-    // Extract tickers
-    const tickers = extractTickers(fullText);
-
-    // Only include posts that mention at least one ticker
-    if (tickers.length === 0) {
-      continue;
-    }
-
-    // Detect sentiment
-    let sentiment = detectSentiment(fullText);
-
-    // Boost positive sentiment for highly upvoted posts (varies by subreddit)
-    const upvoteThreshold = subreddit === 'wallstreetbets' ? 1000 : 500;
-    if (post.score > upvoteThreshold && sentiment === 'neutral') {
-      sentiment = 'positive';
-    }
-
-    posts.push({
-      id: `${subreddit}_${post.id}`, // Prefix with subreddit for uniqueness
-      subreddit,
-      title: post.title,
-      content: post.selftext?.substring(0, 2000) || '', // Limit content length
-      author: post.author,
-      score: post.score,
-      upvoteRatio: post.upvote_ratio,
-      commentCount: post.num_comments,
-      createdAt: new Date(post.created_utc * 1000),
-      permalink: `https://reddit.com${post.permalink}`,
-      flair: post.link_flair_text,
-      tickers,
-      sentiment,
-    });
-  }
-
-  console.log(`[Reddit] r/${subreddit}: Found ${posts.length} posts with ticker mentions from ${data.data.children.length} total`);
-
-  return posts;
+  // Should never reach here, but TypeScript needs this
+  return [];
 }
 
 /**
@@ -570,8 +615,8 @@ async function fetchFromSubreddit(subreddit: SubredditName, limit: number = 30):
         }
       }
 
-      // Rate limit between requests
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Rate limit between sort types (increased from 1000ms to 2000ms)
+      await sleep(2000);
     } catch (error) {
       console.error(`[Reddit] Error fetching r/${subreddit}/${sortType}:`, error);
     }
@@ -595,8 +640,8 @@ async function fetchAllSubreddits(limit: number = 20): Promise<RedditPost[]> {
       const posts = await fetchFromSubreddit(subreddit, limit);
       allPosts.push(...posts);
 
-      // Rate limit between subreddits
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Rate limit between subreddits (increased from 1500ms to 3000ms)
+      await sleep(3000);
     } catch (error) {
       console.error(`[Reddit] Error fetching r/${subreddit}:`, error);
     }
