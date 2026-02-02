@@ -11,51 +11,6 @@
 // ===========================================
 
 /**
- * Finnhub Stock Quote Response
- * Endpoint: GET /quote?symbol=AAPL
- */
-export interface FinnhubQuote {
-  c: number;  // Current price
-  d: number;  // Change ($)
-  dp: number; // Change (%)
-  h: number;  // High price of day
-  l: number;  // Low price of day
-  o: number;  // Open price
-  pc: number; // Previous close
-  t: number;  // Timestamp (Unix)
-}
-
-/**
- * Finnhub Stock Candles Response
- * Endpoint: GET /stock/candle
- */
-export interface FinnhubCandles {
-  c: number[];  // Close prices
-  h: number[];  // High prices
-  l: number[];  // Low prices
-  o: number[];  // Open prices
-  s: string;    // Status ("ok" or "no_data")
-  t: number[];  // Timestamps (Unix)
-  v: number[];  // Volumes
-}
-
-/**
- * Finnhub Company News Article
- * Endpoint: GET /company-news
- */
-export interface FinnhubNewsArticle {
-  category: string;
-  datetime: number;
-  headline: string;
-  id: number;
-  image: string;
-  related: string;
-  source: string;
-  summary: string;
-  url: string;
-}
-
-/**
  * NewsAPI Article Response
  * Endpoint: GET /v2/everything
  */

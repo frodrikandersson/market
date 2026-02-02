@@ -2,7 +2,7 @@
  * News Processor Service
  * ======================
  * Handles fetching, processing, and storing news articles.
- * Integrates with NewsAPI, Finnhub, and Gemini for analysis.
+ * Integrates with NewsAPI, RSS, SEC EDGAR, and Gemini for analysis.
  *
  * Usage:
  *   import { newsProcessor } from '@/services/news-processor';
@@ -11,7 +11,6 @@
 
 import { db } from '@/lib/db';
 import { newsapi } from '@/lib/newsapi';
-import { finnhub } from '@/lib/finnhub';
 import { rss } from '@/lib/rss';
 import { secEdgar } from '@/lib/sec-edgar';
 import { earnings } from '@/lib/earnings';
@@ -21,7 +20,6 @@ import { gemini } from '@/lib/gemini';
 import { companyDiscovery } from '@/services/company-discovery';
 import type {
   NewsAPIArticle,
-  FinnhubNewsArticle,
   ClaudeNewsAnalysis,
   EventCategory,
 } from '@/types';
@@ -71,24 +69,6 @@ function normalizeNewsAPIArticle(article: NewsAPIArticle): ProcessedArticle {
     imageUrl: article.urlToImage,
     author: article.author,
     publishedAt: new Date(article.publishedAt),
-    analysis: null,
-  };
-}
-
-/**
- * Convert Finnhub article to our format
- */
-function normalizeFinnhubArticle(article: FinnhubNewsArticle): ProcessedArticle {
-  return {
-    sourceId: 'finnhub',
-    externalId: article.id.toString(),
-    title: article.headline,
-    content: article.summary,
-    summary: null,
-    url: article.url,
-    imageUrl: article.image || null,
-    author: null,
-    publishedAt: new Date(article.datetime * 1000),
     analysis: null,
   };
 }
@@ -233,29 +213,6 @@ export async function fetchAllNews(): Promise<ProcessedArticle[]> {
     console.log(`[NewsAPI] Fetched ${techArticles.length} tech headlines`);
   } catch (error) {
     console.error('[NewsAPI] Failed to fetch tech headlines:', error);
-  }
-
-  // Fetch from Finnhub - general market news
-  try {
-    const finnhubArticles = await finnhub.getMarketNews('general');
-    articles.push(...finnhubArticles.slice(0, 50).map(normalizeFinnhubArticle));
-    console.log(`[Finnhub] Fetched ${finnhubArticles.length} market news`);
-  } catch (error) {
-    console.error('[Finnhub] Failed to fetch market news:', error);
-  }
-
-  // Fetch company-specific news for top companies
-  const topTickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META'];
-  for (const ticker of topTickers) {
-    try {
-      const companyNews = await finnhub.getCompanyNews(ticker, yesterday, today);
-      articles.push(...companyNews.slice(0, 10).map(normalizeFinnhubArticle));
-      console.log(`[Finnhub] Fetched ${companyNews.length} news for ${ticker}`);
-      // Small delay to avoid rate limits
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    } catch (error) {
-      console.error(`[Finnhub] Failed to fetch news for ${ticker}:`, error);
-    }
   }
 
   // Fetch from RSS feeds (unlimited, no API rate limits!)

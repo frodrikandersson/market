@@ -10,7 +10,7 @@
  */
 
 import { db } from '@/lib/db';
-import { finnhub } from '@/lib/finnhub';
+import { yahoofinance } from '@/lib/yahoofinance';
 
 // ===========================================
 // Types
@@ -123,8 +123,8 @@ export async function getPortfolio(portfolioId: string): Promise<Portfolio | nul
 
   for (const pos of portfolio.positions) {
     try {
-      const quote = await finnhub.getQuote(pos.ticker);
-      const currentPrice = quote.c || pos.avgCost;
+      const quote = await yahoofinance.getQuote(pos.ticker);
+      const currentPrice = quote?.regularMarketPrice || pos.avgCost;
       const marketValue = pos.shares * currentPrice;
       const costBasis = pos.shares * pos.avgCost;
       const gainLoss = marketValue - costBasis;
@@ -227,11 +227,11 @@ export async function executeTrade(request: TradeRequest): Promise<TradeResult> 
   // Get current stock price
   let currentPrice: number;
   try {
-    const quote = await finnhub.getQuote(ticker.toUpperCase());
-    if (!quote.c || quote.c === 0) {
+    const quote = await yahoofinance.getQuote(ticker.toUpperCase());
+    if (!quote || !quote.regularMarketPrice || quote.regularMarketPrice === 0) {
       return { success: false, error: `Unable to get price for ${ticker}` };
     }
-    currentPrice = quote.c;
+    currentPrice = quote.regularMarketPrice;
   } catch (error) {
     return { success: false, error: `Failed to fetch price for ${ticker}` };
   }
@@ -242,15 +242,14 @@ export async function executeTrade(request: TradeRequest): Promise<TradeResult> 
   });
 
   if (!company) {
-    // Try to get company info from Finnhub
+    // Create company with basic info (no external API needed)
     try {
-      const profile = await finnhub.getCompanyProfile(ticker.toUpperCase());
       company = await db.company.create({
         data: {
           ticker: ticker.toUpperCase(),
-          name: profile.name || ticker.toUpperCase(),
-          sector: profile.finnhubIndustry || null,
-          marketCap: profile.marketCapitalization ? profile.marketCapitalization * 1000000 : null,
+          name: ticker.toUpperCase(),
+          sector: null,
+          marketCap: null,
         },
       });
     } catch {

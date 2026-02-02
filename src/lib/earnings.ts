@@ -2,18 +2,14 @@
  * Earnings Call & Reports Client
  * ================================
  * Fetches earnings call information and reports.
- * Uses Finnhub's free earnings calendar + SEC 8-K earnings releases.
- *
- * Sources:
- * - Finnhub Earnings Calendar (free tier)
- * - SEC 8-K Item 2.02 (earnings releases)
+ * Currently disabled - Finnhub removed.
+ * TODO: Integrate alternative earnings calendar API
  *
  * Usage:
  *   import { earnings } from '@/lib/earnings';
  *   const calls = await earnings.getUpcomingEarnings();
  */
 
-import { finnhub } from '@/lib/finnhub';
 import type { NewsAPIArticle } from '@/types';
 
 // ===========================================
@@ -50,74 +46,18 @@ interface EarningsSurprise {
  * Get upcoming earnings calls
  */
 export async function getUpcomingEarnings(daysAhead: number = 7): Promise<NewsAPIArticle[]> {
-  try {
-    const from = getDateDaysAgo(0); // Today
-    const to = getDateDaysAgo(-daysAhead); // N days ahead
-
-    console.log(`[Earnings] Fetching earnings from ${from} to ${to}`);
-
-    // Finnhub provides earnings calendar
-    const response = await fetch(
-      `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Finnhub API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const earningsData: FinnhubEarning[] = data.earningsCalendar || [];
-
-    console.log(`[Earnings] Found ${earningsData.length} upcoming earnings calls`);
-
-    // Convert to news article format
-    return earningsData.map((earning) => convertEarningToArticle(earning, 'upcoming'));
-  } catch (error) {
-    console.error('[Earnings] Error fetching upcoming earnings:', error);
-    return [];
-  }
+  // DISABLED: Finnhub API removed
+  console.log('[Earnings] Earnings calendar disabled - Finnhub API removed');
+  return [];
 }
 
 /**
  * Get recent earnings releases (past week)
  */
 export async function getRecentEarnings(daysBack: number = 7): Promise<NewsAPIArticle[]> {
-  try {
-    const from = getDateDaysAgo(daysBack);
-    const to = getDateDaysAgo(0);
-
-    console.log(`[Earnings] Fetching recent earnings from ${from} to ${to}`);
-
-    const response = await fetch(
-      `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Finnhub API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const earningsData: FinnhubEarning[] = data.earningsCalendar || [];
-
-    console.log(`[Earnings] Found ${earningsData.length} recent earnings releases`);
-
-    // Filter only companies that have reported (epsActual is not null)
-    const reported = earningsData.filter((e) => e.epsActual !== null);
-
-    // Analyze for surprises
-    const withSurprises = reported.map((earning) => {
-      const surprise = calculateSurprise(earning);
-      return { earning, surprise };
-    });
-
-    // Convert to news articles
-    return withSurprises.map(({ earning, surprise }) =>
-      convertEarningToArticle(earning, 'reported', surprise)
-    );
-  } catch (error) {
-    console.error('[Earnings] Error fetching recent earnings:', error);
-    return [];
-  }
+  // DISABLED: Finnhub API removed
+  console.log('[Earnings] Earnings calendar disabled - Finnhub API removed');
+  return [];
 }
 
 /**
@@ -237,16 +177,8 @@ function getDateDaysAgo(days: number): string {
  * Check if earnings API is available
  */
 export async function isAvailable(): Promise<boolean> {
-  try {
-    const from = getDateDaysAgo(0);
-    const to = getDateDaysAgo(-1);
-    const response = await fetch(
-      `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`
-    );
-    return response.ok;
-  } catch {
-    return false;
-  }
+  // DISABLED: Finnhub API removed
+  return false;
 }
 
 // Export as namespace

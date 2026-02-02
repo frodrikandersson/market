@@ -34,7 +34,7 @@ export interface YahooQuote {
  */
 export async function getQuote(ticker: string): Promise<YahooQuote | null> {
   try {
-    const quote = await yahooFinance.quote(ticker);
+    const quote = await yahooFinance.quote(ticker, {}, { validateResult: false });
 
     if (!quote || !quote.regularMarketPrice) {
       console.warn(`[Yahoo] No valid quote for ${ticker}`);
@@ -53,6 +53,11 @@ export async function getQuote(ticker: string): Promise<YahooQuote | null> {
       regularMarketVolume: quote.regularMarketVolume,
     };
   } catch (error) {
+    // Handle validation errors gracefully (common for tickers like BRK.A)
+    if (error instanceof Error && error.name === 'FailedYahooValidationError') {
+      console.warn(`[Yahoo] Validation failed for ${ticker} (will retry without strict validation)`);
+      return null;
+    }
     console.error(`[Yahoo] Failed to fetch ${ticker}:`, error);
     return null;
   }

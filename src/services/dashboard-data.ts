@@ -9,7 +9,7 @@
  */
 
 import { db } from '@/lib/db';
-import { finnhub } from '@/lib/finnhub';
+import { yahoofinance } from '@/lib/yahoofinance';
 import type { Sentiment, EventCategory } from '@/types';
 
 // ===========================================
@@ -225,8 +225,12 @@ export async function getStockPredictions(limit: number = 8): Promise<StockPredi
 
   for (const company of companiesWithImpacts) {
     try {
-      // Get real-time quote from Finnhub
-      const quote = await finnhub.getQuote(company.ticker);
+      // Get real-time quote from Yahoo Finance
+      const quote = await yahoofinance.getQuote(company.ticker);
+
+      if (!quote) {
+        throw new Error('No quote data');
+      }
 
       // Calculate aggregate news impact
       const totalImpact = company.newsImpacts.reduce((sum, i) => sum + i.impactScore, 0);
@@ -287,9 +291,9 @@ export async function getStockPredictions(limit: number = 8): Promise<StockPredi
         ticker: company.ticker,
         name: company.name,
         sector: company.sector,
-        price: quote.c || 0,
-        change: quote.d || 0,
-        changePercent: quote.dp || 0,
+        price: quote.regularMarketPrice || 0,
+        change: quote.regularMarketChange || 0,
+        changePercent: quote.regularMarketChangePercent || 0,
         fundamentals: fundamentalsPred
           ? {
               direction: fundamentalsPred.predictedDirection as 'up' | 'down',

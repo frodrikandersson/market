@@ -12,7 +12,6 @@
  */
 
 import { db } from '@/lib/db';
-import { finnhub } from '@/lib/finnhub';
 
 // ===========================================
 // Types
@@ -134,32 +133,20 @@ export async function discoverCompany(ticker: string): Promise<DiscoveredCompany
     };
   }
 
-  // Fetch from Finnhub
+  // Create company with basic info (will be enriched later via stock price fetches)
   try {
-    const profile = await finnhub.getCompanyProfile(normalizedTicker);
-
-    // Validate we got real data
-    if (!profile.name || !profile.ticker) {
-      console.log(`[Discovery] No profile found for ${normalizedTicker}`);
-      return null;
-    }
-
-    // Map sector
-    const sector = mapIndustryToSector(profile.finnhubIndustry || '');
-
-    // Create in database
     const company = await db.company.create({
       data: {
-        ticker: profile.ticker.toUpperCase(),
-        name: profile.name,
-        sector: sector,
-        industry: profile.finnhubIndustry || null,
-        marketCap: profile.marketCapitalization || null,
+        ticker: normalizedTicker,
+        name: normalizedTicker, // Will be updated later with actual name
+        sector: null,
+        industry: null,
+        marketCap: null,
         isActive: true,
       },
     });
 
-    console.log(`[Discovery] Added new company: ${company.ticker} - ${company.name} (${sector})`);
+    console.log(`[Discovery] Added new company: ${company.ticker} (will fetch details later)`);
 
     return {
       id: company.id,
@@ -171,7 +158,7 @@ export async function discoverCompany(ticker: string): Promise<DiscoveredCompany
       isNew: true,
     };
   } catch (error) {
-    console.error(`[Discovery] Failed to fetch profile for ${normalizedTicker}:`, error);
+    console.error(`[Discovery] Failed to create company for ${normalizedTicker}:`, error);
     return null;
   }
 }
