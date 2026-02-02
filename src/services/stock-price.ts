@@ -84,7 +84,55 @@ export async function fetchQuotes(tickers: string[]): Promise<Map<string, StockP
 }
 
 /**
- * Store daily price in database
+ * Store price snapshot in database (intraday or daily)
+ */
+export async function storePrice(
+  companyId: string,
+  timestamp: Date,
+  open: number,
+  high: number,
+  low: number,
+  close: number,
+  volume: bigint
+): Promise<void> {
+  // Normalize date component for date field (midnight UTC)
+  const normalizedDate = new Date(Date.UTC(
+    timestamp.getUTCFullYear(),
+    timestamp.getUTCMonth(),
+    timestamp.getUTCDate()
+  ));
+
+  // Use full timestamp for unique identification
+  await db.stockPrice.upsert({
+    where: {
+      companyId_timestamp: {
+        companyId,
+        timestamp,
+      },
+    },
+    update: {
+      open,
+      high,
+      low,
+      close,
+      volume,
+      date: normalizedDate, // Update date too
+    },
+    create: {
+      companyId,
+      timestamp,
+      date: normalizedDate,
+      open,
+      high,
+      low,
+      close,
+      volume,
+    },
+  });
+}
+
+/**
+ * Store daily price (backward compatibility wrapper)
  */
 export async function storeDailyPrice(
   companyId: string,
@@ -95,34 +143,7 @@ export async function storeDailyPrice(
   close: number,
   volume: bigint
 ): Promise<void> {
-  // Normalize date to midnight UTC
-  const d = new Date(date);
-  const normalizedDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-
-  await db.stockPrice.upsert({
-    where: {
-      companyId_date: {
-        companyId,
-        date: normalizedDate,
-      },
-    },
-    update: {
-      open,
-      high,
-      low,
-      close,
-      volume,
-    },
-    create: {
-      companyId,
-      date: normalizedDate,
-      open,
-      high,
-      low,
-      close,
-      volume,
-    },
-  });
+  return storePrice(companyId, date, open, high, low, close, volume);
 }
 
 /**
@@ -184,19 +205,18 @@ export async function fetchPricesPrioritized(limit: number = 60): Promise<FetchP
 
   console.log(`[StockPrice] Fetching ${companies.length} prices (${companiesNoPrices.length} new, ${companiesOldPrices.length} updates)`);
 
-  // Use UTC for consistent date handling
+  // Use current timestamp for intraday snapshots
   const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
   for (const company of companies) {
     try {
       const quote = await fetchQuote(company.ticker);
 
       if (quote) {
-        // Store as today's price
-        await storeDailyPrice(
+        // Store with current timestamp (enables intraday tracking)
+        await storePrice(
           company.id,
-          today,
+          now,
           quote.open,
           quote.high,
           quote.low,
@@ -287,19 +307,18 @@ export async function fetchAllPrices(): Promise<FetchPricesResult> {
 
   console.log(`[StockPrice] Fetching prices for ${companies.length} companies`);
 
-  // Use UTC for consistent date handling
+  // Use current timestamp for intraday snapshots
   const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
   for (const company of companies) {
     try {
       const quote = await fetchQuote(company.ticker);
 
       if (quote) {
-        // Store as today's price
-        await storeDailyPrice(
+        // Store with current timestamp (enables intraday tracking)
+        await storePrice(
           company.id,
-          today,
+          now,
           quote.open,
           quote.high,
           quote.low,
@@ -487,6 +506,7 @@ export async function calculateMomentum(
 export const stockPriceService = {
   fetchQuote,
   fetchQuotes,
+  storePrice,
   storeDailyPrice,
   fetchPricesPrioritized,
   fetchAllPrices,

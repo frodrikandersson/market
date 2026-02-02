@@ -134,7 +134,7 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
       {needsFallback && (
         <div className="mb-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
           <p className="text-xs text-primary">
-            ℹ️ Intraday data not available. Showing recent daily data instead.
+            ℹ️ Only daily closing prices available. Intraday views require minute-level data. Showing last 10 days instead.
           </p>
         </div>
       )}

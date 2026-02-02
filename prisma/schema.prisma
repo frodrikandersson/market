@@ -43,21 +43,23 @@ model Company {
   @@index([isActive])
 }
 
-/// StockPrice model - daily OHLCV price data
+/// StockPrice model - OHLCV price data with intraday support
 model StockPrice {
   id        String   @id @default(cuid())
   companyId String
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  date      DateTime @db.Date /// Trading date
+  timestamp DateTime /// Full timestamp (for intraday snapshots)
+  date      DateTime @db.Date /// Trading date (for daily queries and backward compatibility)
   open      Float /// Opening price
   high      Float /// High price
   low       Float /// Low price
-  close     Float /// Closing price
+  close     Float /// Closing price (or current price for intraday snapshots)
   volume    BigInt /// Trading volume
   createdAt DateTime @default(now())
 
-  @@unique([companyId, date])
+  @@unique([companyId, timestamp])
   @@index([date])
+  @@index([companyId, date])
 }
 
 // ===========================================
