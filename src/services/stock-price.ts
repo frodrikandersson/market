@@ -290,6 +290,7 @@ export async function fetchPricesPrioritized(limit: number = 60): Promise<FetchP
 
 /**
  * Fetch and store prices for all active companies
+ * OPTIMIZED: Uses batched DB operations to reduce Prisma operation count
  * (Legacy function for backward compatibility - used by run-predictions)
  */
 export async function fetchAllPrices(): Promise<FetchPricesResult> {
@@ -310,53 +311,48 @@ export async function fetchAllPrices(): Promise<FetchPricesResult> {
   // Use current timestamp for intraday snapshots
   const now = new Date();
 
+  // BATCHING: Collect data for batch operations
+  const successfulIds: string[] = [];
+  const priceData: Array<{
+    companyId: string;
+    timestamp: Date;
+    date: Date;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: bigint;
+  }> = [];
+  const failedCompanies: Array<{ id: string; ticker: string }> = [];
+
   for (const company of companies) {
     try {
       const quote = await fetchQuote(company.ticker);
 
       if (quote) {
-        // Store with current timestamp (enables intraday tracking)
-        await storePrice(
-          company.id,
-          now,
-          quote.open,
-          quote.high,
-          quote.low,
-          quote.price,
-          BigInt(0) // Volume not available from quote endpoint
-        );
+        // Queue price for batch insert
+        const normalizedDate = new Date(Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate()
+        ));
+        priceData.push({
+          companyId: company.id,
+          timestamp: now,
+          date: normalizedDate,
+          open: quote.open,
+          high: quote.high,
+          low: quote.low,
+          close: quote.price,
+          volume: BigInt(0),
+        });
+        successfulIds.push(company.id);
         result.fetched++;
         console.log(`[StockPrice] ${company.ticker}: $${quote.price.toFixed(2)} (${quote.changePercent >= 0 ? '+' : ''}${quote.changePercent.toFixed(2)}%)`);
-
-        // Reset failure counter on success
-        await db.company.update({
-          where: { id: company.id },
-          data: {
-            priceCheckFailures: 0,
-            lastPriceCheckAt: new Date(),
-          },
-        });
       } else {
         result.failed++;
         result.errors.push(`${company.ticker}: No valid quote`);
-
-        // Increment failure counter
-        const updatedCompany = await db.company.update({
-          where: { id: company.id },
-          data: {
-            priceCheckFailures: { increment: 1 },
-            lastPriceCheckAt: new Date(),
-          },
-        });
-
-        // Blacklist after 5 failures
-        if (updatedCompany.priceCheckFailures >= 5) {
-          await db.company.update({
-            where: { id: company.id },
-            data: { isActive: false },
-          });
-          console.warn(`[StockPrice] ⚠️  BLACKLISTED ${company.ticker} after ${updatedCompany.priceCheckFailures} failed price checks`);
-        }
+        failedCompanies.push(company);
       }
 
       // Yahoo Finance has no official rate limit, but be respectful
@@ -365,24 +361,49 @@ export async function fetchAllPrices(): Promise<FetchPricesResult> {
       result.failed++;
       const errorMsg = error instanceof Error ? error.message : String(error);
       result.errors.push(`${company.ticker}: ${errorMsg}`);
+      failedCompanies.push(company);
+    }
+  }
 
-      // Increment failure counter on exception
-      const updatedCompany = await db.company.update({
+  // BATCH WRITE: Execute all DB operations in minimal calls
+  console.log(`[DB] Batching ${priceData.length} prices and ${successfulIds.length} company updates...`);
+
+  // Batch 1: Create all prices (1 operation instead of N)
+  if (priceData.length > 0) {
+    await db.stockPrice.createMany({
+      data: priceData,
+      skipDuplicates: true, // In case of duplicate timestamps
+    });
+  }
+
+  // Batch 2: Reset failure counter for successful companies (1 operation instead of N)
+  if (successfulIds.length > 0) {
+    await db.company.updateMany({
+      where: { id: { in: successfulIds } },
+      data: {
+        priceCheckFailures: 0,
+        lastPriceCheckAt: new Date(),
+      },
+    });
+  }
+
+  // Handle failures individually (need to check count for blacklisting)
+  for (const company of failedCompanies) {
+    const updatedCompany = await db.company.update({
+      where: { id: company.id },
+      data: {
+        priceCheckFailures: { increment: 1 },
+        lastPriceCheckAt: new Date(),
+      },
+    });
+
+    // Blacklist after 5 failures
+    if (updatedCompany.priceCheckFailures >= 5) {
+      await db.company.update({
         where: { id: company.id },
-        data: {
-          priceCheckFailures: { increment: 1 },
-          lastPriceCheckAt: new Date(),
-        },
+        data: { isActive: false },
       });
-
-      // Blacklist after 5 failures
-      if (updatedCompany.priceCheckFailures >= 5) {
-        await db.company.update({
-          where: { id: company.id },
-          data: { isActive: false },
-        });
-        console.warn(`[StockPrice] ⚠️  BLACKLISTED ${company.ticker} after ${updatedCompany.priceCheckFailures} failed price checks`);
-      }
+      console.warn(`[StockPrice] ⚠️  BLACKLISTED ${company.ticker} after ${updatedCompany.priceCheckFailures} failed price checks`);
     }
   }
 

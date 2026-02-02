@@ -323,6 +323,7 @@ export async function saveArticles(
 
 /**
  * Process unprocessed articles with AI
+ * OPTIMIZED: Uses batched DB operations to reduce Prisma operation count
  */
 export async function processUnprocessedArticles(
   limit: number = 20
@@ -336,8 +337,6 @@ export async function processUnprocessedArticles(
 
   console.log(`[AI] Processing ${articles.length} unprocessed articles`);
 
-  let processed = 0;
-  let impacts = 0;
   let companiesDiscovered = 0;
 
   // Get all company tickers for matching (will be updated as we discover)
@@ -346,6 +345,18 @@ export async function processUnprocessedArticles(
     select: { id: true, ticker: true, name: true },
   });
   const tickerToCompany = new Map(companies.map((c) => [c.ticker, c]));
+
+  // BATCHING: Collect all updates and creates
+  const articleUpdates: Array<{ id: string; summary: string }> = [];
+  const impactCreates: Array<{
+    companyId: string;
+    articleId: string;
+    sentiment: string;
+    confidence: number;
+    impactScore: number;
+    reason: string | null;
+  }> = [];
+  const processedIds: string[] = [];
 
   for (const article of articles) {
     try {
@@ -371,16 +382,10 @@ export async function processUnprocessedArticles(
         );
       }
 
-      // Update article with summary
-      await db.newsArticle.update({
-        where: { id: article.id },
-        data: {
-          summary: analysis.summary,
-          processed: true,
-        },
-      });
+      // Queue article update (will be batched)
+      articleUpdates.push({ id: article.id, summary: analysis.summary });
 
-      // Create impacts for mentioned companies (auto-discover if not found)
+      // Queue impacts for mentioned companies
       for (const company of analysis.companies) {
         let matchedCompany = tickerToCompany.get(company.ticker);
 
@@ -399,41 +404,67 @@ export async function processUnprocessedArticles(
         }
 
         if (matchedCompany) {
-          await db.newsImpact.create({
-            data: {
-              companyId: matchedCompany.id,
-              articleId: article.id,
-              sentiment: company.sentiment,
-              confidence: company.confidence,
-              impactScore: calculateImpactScore(
-                company.sentiment,
-                company.confidence,
-                analysis.importance
-              ),
-              reason: company.reason,
-            },
+          impactCreates.push({
+            companyId: matchedCompany.id,
+            articleId: article.id,
+            sentiment: company.sentiment,
+            confidence: company.confidence,
+            impactScore: calculateImpactScore(
+              company.sentiment,
+              company.confidence,
+              analysis.importance
+            ),
+            reason: company.reason,
           });
-          impacts++;
         }
       }
 
-      processed++;
-      console.log(`[AI] Processed: ${article.title.substring(0, 50)}...`);
+      processedIds.push(article.id);
+      console.log(`[AI] Analyzed: ${article.title.substring(0, 50)}...`);
 
-      // Small delay to respect rate limits
+      // Small delay to respect API rate limits
       await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (error) {
       console.error(`[AI] Failed to process: ${article.title}`, error);
       // Mark as processed to avoid retrying bad articles
-      await db.newsArticle.update({
-        where: { id: article.id },
-        data: { processed: true },
-      });
+      processedIds.push(article.id);
     }
   }
 
-  console.log(`[AI] Processed ${processed} articles, created ${impacts} impacts, discovered ${companiesDiscovered} new companies`);
-  return { processed, impacts, companiesDiscovered };
+  // BATCH WRITE: Execute all DB operations in minimal calls
+  console.log(`[DB] Batching ${processedIds.length} article updates and ${impactCreates.length} impact creates...`);
+
+  // Batch 1: Mark all processed articles (1 operation instead of N)
+  if (processedIds.length > 0) {
+    await db.newsArticle.updateMany({
+      where: { id: { in: processedIds } },
+      data: { processed: true },
+    });
+  }
+
+  // Batch 2: Update summaries individually (can't batch different summaries)
+  // But we can use a transaction to reduce round-trips
+  if (articleUpdates.length > 0) {
+    await db.$transaction(
+      articleUpdates.map((update) =>
+        db.newsArticle.update({
+          where: { id: update.id },
+          data: { summary: update.summary },
+        })
+      )
+    );
+  }
+
+  // Batch 3: Create all impacts in one call (1 operation instead of N)
+  if (impactCreates.length > 0) {
+    await db.newsImpact.createMany({
+      data: impactCreates,
+      skipDuplicates: true,
+    });
+  }
+
+  console.log(`[AI] Processed ${processedIds.length} articles, created ${impactCreates.length} impacts, discovered ${companiesDiscovered} new companies`);
+  return { processed: processedIds.length, impacts: impactCreates.length, companiesDiscovered };
 }
 
 /**

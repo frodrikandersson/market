@@ -100,12 +100,12 @@ export async function GET(request: NextRequest) {
     console.log(`  - ${articleBacklog.toLocaleString()} unprocessed articles`);
     console.log(`  - ${socialBacklog.toLocaleString()} unanalyzed social posts`);
 
-    // Step 1: Process unprocessed articles in large batch
+    // Step 1: Process unprocessed articles in batch
     console.log('\n━━━ Processing Backlog Articles ━━━');
     try {
-      // Process 2000 articles per run (20x the normal pipeline)
+      // Process 500 articles per run (reduced from 2000 to lower DB operations)
       const { processed, impacts, companiesDiscovered } =
-        await newsProcessor.processUnprocessedArticles(2000);
+        await newsProcessor.processUnprocessedArticles(500);
 
       results.articlesProcessed = processed;
       results.impactsCreated = impacts;
@@ -122,7 +122,8 @@ export async function GET(request: NextRequest) {
     // Step 2: Process unanalyzed social posts
     console.log('\n━━━ Processing Social Posts ━━━');
     try {
-      const { analyzed, mentions } = await socialProcessor.analyzeUnprocessedPosts(1000);
+      // Reduced from 1000 to 250 to lower DB operations
+      const { analyzed, mentions } = await socialProcessor.analyzeUnprocessedPosts(250);
       results.socialPostsAnalyzed = analyzed;
       results.socialMentionsCreated = mentions;
       console.log(`✓ Analyzed: ${analyzed} social posts`);
