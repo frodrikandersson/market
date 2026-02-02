@@ -53,9 +53,20 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
   };
   const cutoffDate = new Date(now.getTime() - hoursMap[timeRange] * 60 * 60 * 1000);
 
-  const filteredData = data
+  let filteredData = data
     .filter((d) => d.date >= cutoffDate)
     .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  // If short timeframe results in < 2 data points (happens with daily data),
+  // fall back to showing recent daily data
+  const isIntradayTimeframe = ['6H', '12H', '1D'].includes(timeRange);
+  const needsFallback = filteredData.length < 2 && isIntradayTimeframe;
+
+  if (needsFallback) {
+    // Show last 7-10 days of daily data instead
+    const sortedData = [...data].sort((a, b) => b.date.getTime() - a.date.getTime());
+    filteredData = sortedData.slice(0, 10).reverse();
+  }
 
   // Format data for chart (convert bigint to number for volume)
   const chartData = filteredData.map((d) => ({
@@ -119,6 +130,15 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
 
   return (
     <div className="w-full">
+      {/* Intraday Data Notice */}
+      {needsFallback && (
+        <div className="mb-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+          <p className="text-xs text-primary">
+            ℹ️ Intraday data not available. Showing recent daily data instead.
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-3 md:mb-4 gap-3">
         <div>
@@ -131,7 +151,8 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
             </span>
           </div>
           <p className="text-text-muted text-xs md:text-sm mt-1">
-            {timeRange === '6H' ? 'Last 6 hours' :
+            {needsFallback ? 'Recent daily data' :
+             timeRange === '6H' ? 'Last 6 hours' :
              timeRange === '12H' ? 'Last 12 hours' :
              timeRange === '1D' ? 'Last 24 hours' :
              timeRange === '7D' ? 'Last 7 days' :

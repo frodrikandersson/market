@@ -1,4 +1,5 @@
 import { TrendingUp, Activity, BarChart3, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 import { dashboardData } from '@/services/dashboard-data';
 import { RefreshButton } from '@/components/RefreshButton';
 import { RedditSentimentMeter } from '@/components/RedditSentimentMeter';
@@ -250,10 +251,12 @@ function StockCard({
     >
       {/* Header */}
       <div className="flex justify-between items-start mb-3">
-        <div>
-          <h3 className="text-xl font-bold font-mono-numbers text-text-primary">{ticker}</h3>
+        <Link href={`/stock/${ticker}`} className="hover:opacity-80 transition-opacity">
+          <h3 className="text-xl font-bold font-mono-numbers text-text-primary hover:text-primary transition-colors">
+            {ticker}
+          </h3>
           <p className="text-sm text-text-secondary">{name}</p>
-        </div>
+        </Link>
         <SentimentBadge sentiment={sentiment} wasCorrect={wasCorrect} />
       </div>
 

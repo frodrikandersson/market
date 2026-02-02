@@ -1,7 +1,8 @@
-import { ArrowLeft, TrendingUp, TrendingDown, Building2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
 import { prisma } from '@/lib/db';
+import { StocksList } from '@/components/StocksList';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,14 +43,6 @@ export default async function StocksPage() {
     };
   });
 
-  // Group by sector
-  const sectors = stocksData.reduce((acc, stock) => {
-    const sector = stock.sector || 'Other';
-    if (!acc[sector]) acc[sector] = [];
-    acc[sector].push(stock);
-    return acc;
-  }, {} as Record<string, typeof stocksData>);
-
   return (
     <main className="min-h-screen">
       <Header />
@@ -68,77 +61,12 @@ export default async function StocksPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-text-primary mb-2">All Stocks</h1>
           <p className="text-text-secondary">
-            {companies.length} companies tracked across {Object.keys(sectors).length} sectors
+            {companies.length} companies tracked
           </p>
         </div>
 
-        {/* Stocks by Sector */}
-        {Object.entries(sectors).map(([sector, stocks]) => (
-          <div key={sector} className="mb-8">
-            <h2 className="text-xl font-semibold text-text-primary mb-4 flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-primary" />
-              {sector}
-              <span className="text-sm font-normal text-text-muted">({stocks.length})</span>
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {stocks.map((stock) => (
-                <Link
-                  key={stock.ticker}
-                  href={`/stock/${stock.ticker}`}
-                  className="bg-surface rounded-lg border border-border p-4 hover:border-primary/50 transition-all hover:shadow-lg"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <span className="font-bold text-lg text-text-primary">{stock.ticker}</span>
-                    {stock.sentiment && (
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          stock.sentiment === 'positive'
-                            ? 'bg-positive'
-                            : stock.sentiment === 'negative'
-                              ? 'bg-negative'
-                              : 'bg-neutral'
-                        }`}
-                      />
-                    )}
-                  </div>
-                  <p className="text-sm text-text-secondary truncate mb-2">{stock.name}</p>
-                  {stock.price > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono-numbers text-text-primary">
-                        ${stock.price.toFixed(2)}
-                      </span>
-                      <span
-                        className={`flex items-center gap-1 text-sm font-mono-numbers ${
-                          stock.priceChange >= 0 ? 'text-positive' : 'text-negative'
-                        }`}
-                      >
-                        {stock.priceChange >= 0 ? (
-                          <TrendingUp className="w-3 h-3" />
-                        ) : (
-                          <TrendingDown className="w-3 h-3" />
-                        )}
-                        {stock.priceChange >= 0 ? '+' : ''}
-                        {stock.priceChange.toFixed(2)}%
-                      </span>
-                    </div>
-                  )}
-                </Link>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        {companies.length === 0 && (
-          <div className="bg-surface rounded-lg border border-border p-8 text-center">
-            <p className="text-text-secondary mb-2">No companies tracked yet</p>
-            <p className="text-text-muted text-sm">
-              Run the seed script to populate companies:
-            </p>
-            <code className="text-xs text-primary mt-2 block">
-              npx tsx scripts/seed-companies.ts
-            </code>
-          </div>
-        )}
+        {/* Stocks List with Search */}
+        <StocksList stocks={stocksData} />
 
         {/* Disclaimer */}
         <div className="mt-12 p-4 bg-surface/50 rounded-lg border border-border">
