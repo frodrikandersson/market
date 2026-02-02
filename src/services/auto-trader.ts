@@ -43,13 +43,19 @@ const MODEL_CONFIGS: Record<ModelType, {
   POSITION_SIZE_NORMAL: number;
   POSITION_SIZE_HIGH: number;
   MAX_POSITIONS: number;
+  PROFIT_TARGET: number;
+  STOP_LOSS: number;
+  MAX_HOLD_DAYS: number;
 }> = {
   fundamentals: {
-    MIN_CONFIDENCE: 0.65,      // Conservative: News-based signals
+    MIN_CONFIDENCE: 0.65,       // Conservative: News-based signals
     HIGH_CONFIDENCE: 0.80,
     POSITION_SIZE_NORMAL: 0.05, // 5% per position
     POSITION_SIZE_HIGH: 0.08,   // 8% for high confidence
     MAX_POSITIONS: 10,          // Quality over quantity
+    PROFIT_TARGET: 0.05,        // 5% - news trends are slower
+    STOP_LOSS: -0.03,           // -3% stop loss
+    MAX_HOLD_DAYS: 5,           // Hold up to 5 days
   },
   hype: {
     MIN_CONFIDENCE: 0.55,       // Aggressive: Social media signals
@@ -57,6 +63,9 @@ const MODEL_CONFIGS: Record<ModelType, {
     POSITION_SIZE_NORMAL: 0.03, // 3% per position (smaller = risk mgmt)
     POSITION_SIZE_HIGH: 0.05,   // 5% for high confidence
     MAX_POSITIONS: 15,          // More positions = diversification
+    PROFIT_TARGET: 0.03,        // 3% - hype fades fast, take profits quick!
+    STOP_LOSS: -0.03,           // -3% stop loss (tight risk management)
+    MAX_HOLD_DAYS: 3,           // Shorter hold - hype is temporary
   },
   combined: {
     MIN_CONFIDENCE: 0.60,       // Balanced: Both models agree
@@ -64,15 +73,15 @@ const MODEL_CONFIGS: Record<ModelType, {
     POSITION_SIZE_NORMAL: 0.06, // 6% per position
     POSITION_SIZE_HIGH: 0.09,   // 9% for high confidence
     MAX_POSITIONS: 8,           // Fewer, higher conviction
+    PROFIT_TARGET: 0.04,        // 4% - middle ground
+    STOP_LOSS: -0.03,           // -3% stop loss
+    MAX_HOLD_DAYS: 4,           // 4 days hold
   },
 };
 
-// Shared configuration (same for all models)
+// Shared configuration (fallbacks)
 const CONFIG = {
   MAX_SINGLE_POSITION: 0.15,
-  PROFIT_TARGET: 0.05,
-  STOP_LOSS: -0.03,
-  MAX_HOLD_DAYS: 5,
   REVERSAL_CONFIDENCE: 0.60,
   STARTING_CASH: 100000,
 };
@@ -250,6 +259,7 @@ async function checkSellSignals(
   modelType: ModelType
 ): Promise<TradeDecision[]> {
   const decisions: TradeDecision[] = [];
+  const modelConfig = MODEL_CONFIGS[modelType];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -261,13 +271,13 @@ async function checkSellSignals(
       const currentPrice = quote.regularMarketPrice;
       const gainLossPercent = (currentPrice - position.avgCost) / position.avgCost;
 
-      // Check profit target
-      if (gainLossPercent >= CONFIG.PROFIT_TARGET) {
+      // Check profit target (model-specific)
+      if (gainLossPercent >= modelConfig.PROFIT_TARGET) {
         decisions.push({
           ticker: position.ticker,
           companyId: position.companyId,
           action: 'sell',
-          reason: `Profit target hit: ${(gainLossPercent * 100).toFixed(1)}% gain`,
+          reason: `Profit target hit: ${(gainLossPercent * 100).toFixed(1)}% gain (target: ${(modelConfig.PROFIT_TARGET * 100).toFixed(0)}%)`,
           confidence: 1,
           modelType,
           suggestedShares: position.shares,
@@ -275,8 +285,8 @@ async function checkSellSignals(
         continue;
       }
 
-      // Check stop loss
-      if (gainLossPercent <= CONFIG.STOP_LOSS) {
+      // Check stop loss (model-specific)
+      if (gainLossPercent <= modelConfig.STOP_LOSS) {
         decisions.push({
           ticker: position.ticker,
           companyId: position.companyId,
@@ -289,16 +299,16 @@ async function checkSellSignals(
         continue;
       }
 
-      // Check hold duration
+      // Check hold duration (model-specific)
       const holdDays = Math.floor(
         (Date.now() - position.createdAt.getTime()) / (1000 * 60 * 60 * 24)
       );
-      if (holdDays >= CONFIG.MAX_HOLD_DAYS) {
+      if (holdDays >= modelConfig.MAX_HOLD_DAYS) {
         decisions.push({
           ticker: position.ticker,
           companyId: position.companyId,
           action: 'sell',
-          reason: `Max hold period (${CONFIG.MAX_HOLD_DAYS} days) exceeded`,
+          reason: `Max hold period (${modelConfig.MAX_HOLD_DAYS} days) exceeded`,
           confidence: 0.8,
           modelType,
           suggestedShares: position.shares,
