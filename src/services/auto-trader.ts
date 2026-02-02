@@ -15,7 +15,7 @@
  */
 
 import { prisma } from '@/lib/db';
-import { finnhub } from '@/lib/finnhub';
+import { yahoofinance } from '@/lib/yahoofinance';
 
 // Model types
 export type ModelType = 'fundamentals' | 'hype' | 'combined';
@@ -150,9 +150,9 @@ async function calculatePortfolioValue(portfolio: PortfolioWithRelations): Promi
 
   for (const position of portfolio.positions) {
     try {
-      const quote = await finnhub.getQuote(position.ticker);
-      if (quote.c > 0) {
-        positionsValue += position.shares * quote.c;
+      const quote = await yahoofinance.getQuote(position.ticker);
+      if (quote.regularMarketPrice > 0) {
+        positionsValue += position.shares * quote.regularMarketPrice;
       }
     } catch {
       positionsValue += position.shares * position.avgCost;
@@ -255,10 +255,10 @@ async function checkSellSignals(
 
   for (const position of portfolio.positions) {
     try {
-      const quote = await finnhub.getQuote(position.ticker);
-      if (!quote.c || quote.c <= 0) continue;
+      const quote = await yahoofinance.getQuote(position.ticker);
+      if (!quote.regularMarketPrice || quote.regularMarketPrice <= 0) continue;
 
-      const currentPrice = quote.c;
+      const currentPrice = quote.regularMarketPrice;
       const gainLossPercent = (currentPrice - position.avgCost) / position.avgCost;
 
       // Check profit target
@@ -348,13 +348,13 @@ async function executeBuy(
   portfolioValue: number
 ): Promise<boolean> {
   try {
-    const quote = await finnhub.getQuote(decision.ticker);
-    if (!quote.c || quote.c <= 0) {
+    const quote = await yahoofinance.getQuote(decision.ticker);
+    if (!quote.regularMarketPrice || quote.regularMarketPrice <= 0) {
       console.error(`[AUTO-TRADER] Invalid price for ${decision.ticker}`);
       return false;
     }
 
-    const price = quote.c;
+    const price = quote.regularMarketPrice;
     const modelConfig = MODEL_CONFIGS[decision.modelType];
     const isHighConfidence = decision.confidence >= modelConfig.HIGH_CONFIDENCE;
     const positionPercent = isHighConfidence ? modelConfig.POSITION_SIZE_HIGH : modelConfig.POSITION_SIZE_NORMAL;
@@ -444,10 +444,10 @@ async function executeSell(
     const position = portfolio.positions.find(p => p.companyId === decision.companyId);
     if (!position) return false;
 
-    const quote = await finnhub.getQuote(decision.ticker);
-    if (!quote.c || quote.c <= 0) return false;
+    const quote = await yahoofinance.getQuote(decision.ticker);
+    if (!quote.regularMarketPrice || quote.regularMarketPrice <= 0) return false;
 
-    const price = quote.c;
+    const price = quote.regularMarketPrice;
     const sharesToSell = decision.suggestedShares || position.shares;
     const totalValue = sharesToSell * price;
 
@@ -599,8 +599,8 @@ async function getPortfolioStatus(modelType: ModelType) {
   const positions = await Promise.all(
     portfolio.positions.map(async (pos) => {
       try {
-        const quote = await finnhub.getQuote(pos.ticker);
-        const currentPrice = quote.c || pos.avgCost;
+        const quote = await yahoofinance.getQuote(pos.ticker);
+        const currentPrice = quote.regularMarketPrice || pos.avgCost;
         const marketValue = pos.shares * currentPrice;
         const gainLoss = marketValue - (pos.shares * pos.avgCost);
         const gainLossPercent = (currentPrice - pos.avgCost) / pos.avgCost * 100;

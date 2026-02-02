@@ -1,7 +1,8 @@
 /**
  * Stock Price Service
  * ===================
- * Fetches and stores stock prices from Finnhub.
+ * Fetches and stores stock prices from Yahoo Finance.
+ * Supports all global exchanges (US, Canada, UK, Australia, Europe, etc.)
  *
  * Usage:
  *   import { stockPriceService } from '@/services/stock-price';
@@ -9,7 +10,7 @@
  */
 
 import { db } from '@/lib/db';
-import { finnhub } from '@/lib/finnhub';
+import { yahoofinance } from '@/lib/yahoofinance';
 
 // ===========================================
 // Types
@@ -41,23 +42,22 @@ export interface FetchPricesResult {
  */
 export async function fetchQuote(ticker: string): Promise<StockPriceResult | null> {
   try {
-    const quote = await finnhub.getQuote(ticker);
+    const quote = await yahoofinance.getQuote(ticker);
 
-    // Validate the quote (Finnhub returns zeros for invalid tickers)
-    if (quote.c === 0 && quote.h === 0 && quote.l === 0) {
+    if (!quote || !quote.regularMarketPrice) {
       console.warn(`[StockPrice] Invalid quote for ${ticker} - may be delisted or invalid`);
       return null;
     }
 
     return {
       ticker,
-      price: quote.c,
-      change: quote.d,
-      changePercent: quote.dp,
-      high: quote.h,
-      low: quote.l,
-      open: quote.o,
-      previousClose: quote.pc,
+      price: quote.regularMarketPrice,
+      change: quote.regularMarketChange,
+      changePercent: quote.regularMarketChangePercent,
+      high: quote.regularMarketDayHigh,
+      low: quote.regularMarketDayLow,
+      open: quote.regularMarketOpen,
+      previousClose: quote.regularMarketPreviousClose,
     };
   } catch (error) {
     console.error(`[StockPrice] Failed to fetch ${ticker}:`, error);
@@ -76,8 +76,8 @@ export async function fetchQuotes(tickers: string[]): Promise<Map<string, StockP
     if (quote) {
       results.set(ticker, quote);
     }
-    // Rate limit: 60 calls/min = 1 per second max
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Yahoo Finance has no official rate limit, but be respectful
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   return results;
@@ -210,8 +210,8 @@ export async function fetchPricesPrioritized(limit: number = 60): Promise<FetchP
         result.errors.push(`${company.ticker}: No valid quote`);
       }
 
-      // Rate limit delay: 60 calls/min = 1 second per call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Yahoo Finance has no official rate limit, but be respectful
+      await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (error) {
       result.failed++;
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -268,8 +268,8 @@ export async function fetchAllPrices(): Promise<FetchPricesResult> {
         result.errors.push(`${company.ticker}: No valid quote`);
       }
 
-      // Rate limit delay: 60 calls/min = 1 second per call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Yahoo Finance has no official rate limit, but be respectful
+      await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (error) {
       result.failed++;
       const errorMsg = error instanceof Error ? error.message : String(error);

@@ -1,22 +1,21 @@
 /**
- * Cron Endpoint: Stock Price Fetcher (Prioritized)
- * =================================================
- * Smart stock price fetching with prioritization.
+ * Cron Endpoint: Stock Price Fetcher (All Companies)
+ * ===================================================
+ * Fetches stock prices for ALL active companies in the database.
  *
- * Runs every 2 minutes, fetches 60 stocks per run.
- * Priority 1: Companies with no prices yet (newly discovered)
- * Priority 2: Companies with oldest prices (needs update)
+ * Runs every 1 hour, fetches all companies in one run (~1-2 minutes total).
+ * Uses Yahoo Finance which supports all global exchanges (US, Canada, UK, Australia, Europe, etc.)
  *
  * This ensures:
- * - New companies get prices within 2 minutes
- * - All companies get updated in round-robin fashion
- * - Each run completes in ~60 seconds (respects 60 calls/min limit)
+ * - All companies get fresh prices every hour
+ * - New companies get prices within 1 hour of discovery
+ * - No rate limit issues (Yahoo Finance has no official limits)
  *
  * Workflow:
- * 1. Find up to 60 companies needing prices (prioritized)
- * 2. Fetch current quotes from Finnhub
- * 3. Store as daily OHLCV data
- * 4. Respect rate limits (60 calls/min = 1 call/sec)
+ * 1. Fetch current quotes for ALL active companies
+ * 2. Store as daily OHLCV data
+ * 3. Small delay between requests (100ms) to be respectful
+ * 4. Completes in ~1-2 minutes for 600+ companies
  *
  * Usage:
  *   GET /api/cron/fetch-prices?secret=YOUR_CRON_SECRET
@@ -109,8 +108,8 @@ export async function GET(request: NextRequest) {
     console.log(`Without prices: ${totalCompanies - companiesWithPrices}`);
     console.log();
 
-    // Fetch up to 60 prices (prioritized)
-    const result = await stockPriceService.fetchPricesPrioritized(60);
+    // Fetch ALL prices (no limit)
+    const result = await stockPriceService.fetchAllPrices();
 
     results.totalCompanies = totalCompanies;
     results.pricesFetched = result.fetched;
