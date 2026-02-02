@@ -17,6 +17,9 @@ on:
     # Track predictions daily at 9:30 AM ET (2:30 PM UTC)
     - cron: '30 14 * * 1-5'  # Weekdays only
 
+    # Auto-trade every 2 hours during market hours (weekdays 10AM-4PM ET = 15:00-21:00 UTC)
+    - cron: '0 15,17,19,21 * * 1-5'
+
   # Allow manual triggering
   workflow_dispatch:
     inputs:
@@ -30,7 +33,7 @@ on:
           - backlog-processor
           - run-predictions
           - track-predictions
-          - auto-trader
+          - auto-trade
           - all
 
 jobs:
@@ -159,18 +162,19 @@ jobs:
 
           echo "✓ Prediction tracking completed successfully"
 
-  auto-trader:
+  auto-trade:
     runs-on: ubuntu-latest
-    # Run daily at 5:15 PM ET (after predictions are generated)
-    if: github.event.schedule == '15 22 * * *' || github.event.inputs.job == 'auto-trader' || github.event.inputs.job == 'all'
+    # Run every 2 hours during market hours (10AM, 12PM, 2PM, 4PM ET) weekdays
+    # Also runs after daily predictions at 5PM ET (22:00 UTC)
+    if: github.event.schedule == '0 15,17,19,21 * * 1-5' || github.event.schedule == '0 22 * * *' || github.event.inputs.job == 'auto-trade' || github.event.inputs.job == 'all'
 
     steps:
-      - name: Execute Auto-Trading
+      - name: Execute Auto-Trading (Buy & Sell Check)
         run: |
-          echo "Executing AI auto-trading for all models..."
+          echo "Executing AI auto-trading - checking buy/sell signals..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 300 -X POST \
-            "${{ secrets.APP_URL }}/api/auto-trader")
+          response=$(curl -s -w "\n%{http_code}" -m 300 \
+            "${{ secrets.APP_URL }}/api/cron/auto-trade?secret=${{ secrets.CRON_SECRET }}")
 
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | head -n-1)
