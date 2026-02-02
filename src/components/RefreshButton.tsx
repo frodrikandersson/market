@@ -6,12 +6,12 @@ import { RefreshCw } from 'lucide-react';
 interface RefreshResult {
   success: boolean;
   results?: {
-    news: { articles: number; processed: number };
+    news: { articles: number; saved: number };
     social: { posts: number; saved: number };
-    predictions: { generated: number };
     errors: string[];
   };
   durationMs?: number;
+  message?: string;
   error?: string;
 }
 
@@ -21,12 +21,21 @@ export function RefreshButton() {
   const [showResult, setShowResult] = useState(false);
 
   const handleRefresh = async () => {
+    // Prompt for admin password
+    const password = prompt('Enter admin password to refresh data:');
+    if (!password) {
+      return; // User cancelled
+    }
+
     setIsRefreshing(true);
     setShowResult(false);
 
     try {
       const response = await fetch('/api/refresh', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${password}`,
+        },
       });
 
       const result: RefreshResult = await response.json();
@@ -82,15 +91,15 @@ export function RefreshButton() {
         >
           {lastResult.success && lastResult.results ? (
             <div className="text-xs space-y-1">
-              <div className="font-semibold text-positive mb-2">Refresh Complete!</div>
+              <div className="font-semibold text-positive mb-2">Data Fetched!</div>
               <div className="text-text-secondary">
-                News: {lastResult.results.news.processed} processed
+                News: {lastResult.results.news.saved} saved
               </div>
               <div className="text-text-secondary">
-                Social: {lastResult.results.social.saved} new posts
+                Social: {lastResult.results.social.saved} saved
               </div>
-              <div className="text-text-secondary">
-                Predictions: {lastResult.results.predictions.generated} generated
+              <div className="text-text-muted mt-2 text-[10px]">
+                AI processing happens in background
               </div>
               <div className="text-text-muted mt-1">
                 Reloading page...

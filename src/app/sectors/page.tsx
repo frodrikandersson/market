@@ -245,13 +245,15 @@ function SectorCard({
               <Link
                 key={mover.ticker}
                 href={`/stock/${mover.ticker}`}
-                className="flex items-center justify-between p-2 bg-background rounded hover:bg-background/80 transition-colors"
+                className="flex items-center justify-between p-2 bg-background rounded hover:bg-background/80 transition-colors gap-2"
               >
-                <div>
-                  <span className="font-semibold text-text-primary">{mover.ticker}</span>
-                  <span className="text-xs text-text-muted ml-2 truncate">{mover.name}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-text-primary">{mover.ticker}</span>
+                    <span className="text-xs text-text-muted truncate">{mover.name}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <span
                     className={`text-sm ${
                       mover.prediction === 'up' ? 'text-positive' : 'text-negative'

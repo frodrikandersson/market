@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { RedditSentiment } from '@/services/dashboard-data';
 
 interface RedditSentimentMeterProps {
@@ -143,10 +144,14 @@ export function RedditSentimentMeter({ sentiment }: RedditSentimentMeterProps) {
                 <div className="text-xs text-positive mb-1.5">TOP BULLISH</div>
                 <div className="space-y-1">
                   {sentiment.topBullishTickers.slice(0, 3).map((t) => (
-                    <div key={t.ticker} className="flex justify-between text-xs">
-                      <span className="text-text-primary font-mono">${t.ticker}</span>
+                    <Link
+                      key={t.ticker}
+                      href={`/stock/${t.ticker}`}
+                      className="flex justify-between text-xs hover:bg-positive/10 p-1 rounded transition-colors cursor-pointer"
+                    >
+                      <span className="text-text-primary font-mono hover:text-positive">${t.ticker}</span>
                       <span className="text-text-muted">{t.mentions}</span>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -156,10 +161,14 @@ export function RedditSentimentMeter({ sentiment }: RedditSentimentMeterProps) {
                 <div className="text-xs text-negative mb-1.5">TOP BEARISH</div>
                 <div className="space-y-1">
                   {sentiment.topBearishTickers.slice(0, 3).map((t) => (
-                    <div key={t.ticker} className="flex justify-between text-xs">
-                      <span className="text-text-primary font-mono">${t.ticker}</span>
+                    <Link
+                      key={t.ticker}
+                      href={`/stock/${t.ticker}`}
+                      className="flex justify-between text-xs hover:bg-negative/10 p-1 rounded transition-colors cursor-pointer"
+                    >
+                      <span className="text-text-primary font-mono hover:text-negative">${t.ticker}</span>
                       <span className="text-text-muted">{t.mentions}</span>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </div>

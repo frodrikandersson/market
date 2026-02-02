@@ -215,47 +215,27 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
         </div>
       )}
 
-      {/* Table */}
+      {/* Mobile: Card Layout */}
       {filteredPredictions.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-text-muted border-b border-border">
-                <th className="pb-3 font-medium text-xs">Made</th>
-                <th className="pb-3 font-medium text-xs">Ticker</th>
-                <th className="pb-3 font-medium text-xs">Model</th>
-                <th className="pb-3 font-medium text-xs">Predicted</th>
-                <th className="pb-3 font-medium text-xs">Target</th>
-                <th className="pb-3 font-medium text-xs">Actual/Current</th>
-                <th className="pb-3 font-medium text-xs">Confidence</th>
-                <th className="pb-3 font-medium text-xs">Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPredictions.map((pred) => {
-                const isDue = isPredictionDue(pred);
-                return (
-                  <tr key={pred.id} className="border-b border-border/50 hover:bg-background/50">
-                    {/* Prediction Date */}
-                    <td className="py-3 font-mono-numbers text-text-secondary text-xs">
-                      {pred.predictionDate.toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </td>
-
-                    {/* Ticker */}
-                    <td className="py-3">
+        <>
+          {/* Mobile Cards (< lg) */}
+          <div className="lg:hidden space-y-3">
+            {filteredPredictions.map((pred) => {
+              const isDue = isPredictionDue(pred);
+              return (
+                <div
+                  key={pred.id}
+                  className="bg-background border border-border rounded-lg p-4 hover:border-primary/30 transition-colors"
+                >
+                  {/* Header: Ticker, Model, Result */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
                       <Link
                         href={`/stock/${pred.ticker}`}
-                        className="font-semibold text-text-primary hover:text-primary transition-colors"
+                        className="text-lg font-bold text-text-primary hover:text-primary transition-colors"
                       >
                         {pred.ticker}
                       </Link>
-                    </td>
-
-                    {/* Model */}
-                    <td className="py-3">
                       <span
                         className={`px-2 py-0.5 rounded text-xs ${
                           pred.modelType === 'fundamentals'
@@ -265,15 +245,32 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
                       >
                         {pred.modelType === 'fundamentals' ? 'Fund' : 'Hype'}
                       </span>
-                    </td>
+                    </div>
+                    {pred.wasCorrect !== null && isDue ? (
+                      <span
+                        className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                          pred.wasCorrect
+                            ? 'bg-positive/20 text-positive'
+                            : 'bg-negative/20 text-negative'
+                        }`}
+                      >
+                        {pred.wasCorrect ? '✓ Correct' : '✗ Wrong'}
+                      </span>
+                    ) : (
+                      <span className="text-text-muted text-xs">Pending</span>
+                    )}
+                  </div>
 
-                    {/* Predicted Direction + Baseline Price + Predicted Change */}
-                    <td className="py-3">
+                  {/* Prediction Info */}
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    {/* Predicted */}
+                    <div>
+                      <div className="text-text-muted text-xs mb-1">Predicted</div>
                       <div className="flex flex-col">
                         <span
-                          className={
+                          className={`font-semibold ${
                             pred.predictedDirection === 'up' ? 'text-positive' : 'text-negative'
-                          }
+                          }`}
                         >
                           {pred.predictedDirection === 'up' ? '▲ UP' : '▼ DOWN'}
                         </span>
@@ -289,46 +286,21 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
                           </span>
                         )}
                       </div>
-                    </td>
+                    </div>
 
-                    {/* Target Date/Time */}
-                    <td className="py-3 font-mono-numbers text-xs">
-                      <div className="flex flex-col">
-                        <span className="text-text-secondary">
-                          {pred.targetDate.toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </span>
-                        {pred.targetTime && (
-                          <span className="text-text-muted text-xs">
-                            {pred.targetTime.toLocaleTimeString('en-US', {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        )}
-                        {pred.timeframe && (
-                          <span className="text-xs text-primary/70 mt-0.5">
-                            ({pred.timeframe})
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Actual/Current Direction */}
-                    <td className="py-3">
+                    {/* Actual/Current */}
+                    <div>
+                      <div className="text-text-muted text-xs mb-1">Actual/Current</div>
                       {pred.actualDirection ? (
-                        // After evaluation: show final result
                         <div className="flex flex-col">
                           <span
-                            className={
+                            className={`font-semibold ${
                               pred.actualDirection === 'up'
                                 ? 'text-positive'
                                 : pred.actualDirection === 'down'
                                   ? 'text-negative'
                                   : 'text-text-muted'
-                            }
+                            }`}
                           >
                             {pred.actualDirection === 'up'
                               ? '▲ UP'
@@ -344,9 +316,8 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
                           )}
                         </div>
                       ) : pred.currentPrice ? (
-                        // Before evaluation: show current price from snapshots
                         <div className="flex flex-col">
-                          <span className="text-text-secondary text-sm">
+                          <span className="text-text-secondary text-sm font-semibold">
                             ${pred.currentPrice.toFixed(2)}
                           </span>
                           {pred.currentChange !== null && (
@@ -369,47 +340,248 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
                           {isDue ? 'Evaluating...' : 'Pending'}
                         </span>
                       )}
-                    </td>
+                    </div>
+                  </div>
 
-                    {/* Confidence */}
-                    <td className="py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-1.5 bg-surface rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              pred.modelType === 'fundamentals' ? 'bg-primary' : 'bg-secondary'
-                            }`}
-                            style={{ width: `${pred.confidence * 100}%` }}
-                          />
-                        </div>
-                        <span className="font-mono-numbers text-text-secondary text-xs">
-                          {(pred.confidence * 100).toFixed(0)}%
+                  {/* Footer: Dates and Confidence */}
+                  <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                    <div className="flex items-center gap-4 text-xs">
+                      <div>
+                        <span className="text-text-muted">Made: </span>
+                        <span className="text-text-secondary font-mono-numbers">
+                          {pred.predictionDate.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
                         </span>
                       </div>
-                    </td>
+                      <div>
+                        <span className="text-text-muted">Target: </span>
+                        <span className="text-text-secondary font-mono-numbers">
+                          {pred.targetDate.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                        {pred.timeframe && (
+                          <span className="text-primary/70 ml-1">({pred.timeframe})</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-1.5 bg-surface rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            pred.modelType === 'fundamentals' ? 'bg-primary' : 'bg-secondary'
+                          }`}
+                          style={{ width: `${pred.confidence * 100}%` }}
+                        />
+                      </div>
+                      <span className="font-mono-numbers text-text-secondary text-xs">
+                        {(pred.confidence * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
-                    {/* Result */}
-                    <td className="py-3">
-                      {pred.wasCorrect !== null && isDue ? (
+          {/* Desktop: Table Layout (>= lg) */}
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-text-muted border-b border-border">
+                  <th className="pb-3 font-medium text-xs">Made</th>
+                  <th className="pb-3 font-medium text-xs">Ticker</th>
+                  <th className="pb-3 font-medium text-xs">Model</th>
+                  <th className="pb-3 font-medium text-xs">Predicted</th>
+                  <th className="pb-3 font-medium text-xs">Target</th>
+                  <th className="pb-3 font-medium text-xs">Actual/Current</th>
+                  <th className="pb-3 font-medium text-xs">Confidence</th>
+                  <th className="pb-3 font-medium text-xs">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPredictions.map((pred) => {
+                  const isDue = isPredictionDue(pred);
+                  return (
+                    <tr key={pred.id} className="border-b border-border/50 hover:bg-background/50">
+                      {/* Prediction Date */}
+                      <td className="py-3 font-mono-numbers text-text-secondary text-xs">
+                        {pred.predictionDate.toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </td>
+
+                      {/* Ticker */}
+                      <td className="py-3">
+                        <Link
+                          href={`/stock/${pred.ticker}`}
+                          className="font-semibold text-text-primary hover:text-primary transition-colors"
+                        >
+                          {pred.ticker}
+                        </Link>
+                      </td>
+
+                      {/* Model */}
+                      <td className="py-3">
                         <span
                           className={`px-2 py-0.5 rounded text-xs ${
-                            pred.wasCorrect
-                              ? 'bg-positive/20 text-positive'
-                              : 'bg-negative/20 text-negative'
+                            pred.modelType === 'fundamentals'
+                              ? 'bg-primary/20 text-primary'
+                              : 'bg-secondary/20 text-secondary'
                           }`}
                         >
-                          {pred.wasCorrect ? '✓ Correct' : '✗ Wrong'}
+                          {pred.modelType === 'fundamentals' ? 'Fund' : 'Hype'}
                         </span>
-                      ) : (
-                        <span className="text-text-muted text-xs">-</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+
+                      {/* Predicted Direction + Baseline Price + Predicted Change */}
+                      <td className="py-3">
+                        <div className="flex flex-col">
+                          <span
+                            className={
+                              pred.predictedDirection === 'up' ? 'text-positive' : 'text-negative'
+                            }
+                          >
+                            {pred.predictedDirection === 'up' ? '▲ UP' : '▼ DOWN'}
+                          </span>
+                          {pred.baselinePrice && (
+                            <span className="text-text-muted text-xs">
+                              from ${pred.baselinePrice.toFixed(2)}
+                            </span>
+                          )}
+                          {pred.predictedChange !== null && (
+                            <span className="text-xs text-primary/70">
+                              ({pred.predictedChange > 0 ? '+' : ''}
+                              {pred.predictedChange.toFixed(2)}%)
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Target Date/Time */}
+                      <td className="py-3 font-mono-numbers text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-text-secondary">
+                            {pred.targetDate.toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </span>
+                          {pred.targetTime && (
+                            <span className="text-text-muted text-xs">
+                              {pred.targetTime.toLocaleTimeString('en-US', {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          )}
+                          {pred.timeframe && (
+                            <span className="text-xs text-primary/70 mt-0.5">
+                              ({pred.timeframe})
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Actual/Current Direction */}
+                      <td className="py-3">
+                        {pred.actualDirection ? (
+                          // After evaluation: show final result
+                          <div className="flex flex-col">
+                            <span
+                              className={
+                                pred.actualDirection === 'up'
+                                  ? 'text-positive'
+                                  : pred.actualDirection === 'down'
+                                    ? 'text-negative'
+                                    : 'text-text-muted'
+                              }
+                            >
+                              {pred.actualDirection === 'up'
+                                ? '▲ UP'
+                                : pred.actualDirection === 'down'
+                                  ? '▼ DOWN'
+                                  : '━ FLAT'}
+                            </span>
+                            {pred.actualChange !== null && (
+                              <span className="text-text-muted text-xs">
+                                ({pred.actualChange > 0 ? '+' : ''}
+                                {pred.actualChange.toFixed(2)}%)
+                              </span>
+                            )}
+                          </div>
+                        ) : pred.currentPrice ? (
+                          // Before evaluation: show current price from snapshots
+                          <div className="flex flex-col">
+                            <span className="text-text-secondary text-sm">
+                              ${pred.currentPrice.toFixed(2)}
+                            </span>
+                            {pred.currentChange !== null && (
+                              <span
+                                className={`text-xs ${
+                                  pred.currentChange > 0
+                                    ? 'text-positive'
+                                    : pred.currentChange < 0
+                                      ? 'text-negative'
+                                      : 'text-text-muted'
+                                }`}
+                              >
+                                ({pred.currentChange > 0 ? '+' : ''}
+                                {pred.currentChange.toFixed(2)}%)
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-text-muted text-xs">
+                            {isDue ? 'Evaluating...' : 'Pending'}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Confidence */}
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-surface rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                pred.modelType === 'fundamentals' ? 'bg-primary' : 'bg-secondary'
+                              }`}
+                              style={{ width: `${pred.confidence * 100}%` }}
+                            />
+                          </div>
+                          <span className="font-mono-numbers text-text-secondary text-xs">
+                            {(pred.confidence * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Result */}
+                      <td className="py-3">
+                        {pred.wasCorrect !== null && isDue ? (
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs ${
+                              pred.wasCorrect
+                                ? 'bg-positive/20 text-positive'
+                                : 'bg-negative/20 text-negative'
+                            }`}
+                          >
+                            {pred.wasCorrect ? '✓ Correct' : '✗ Wrong'}
+                          </span>
+                        ) : (
+                          <span className="text-text-muted text-xs">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : (
         <div className="text-center py-12">
           <p className="text-text-muted text-sm">

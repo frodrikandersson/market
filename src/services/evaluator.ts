@@ -37,13 +37,6 @@ interface AccuracyStats {
 }
 
 // ===========================================
-// Constants
-// ===========================================
-
-// Threshold for "flat" movement (no significant change)
-const FLAT_THRESHOLD = 0.005; // 0.5%
-
-// ===========================================
 // Main Functions
 // ===========================================
 
@@ -76,18 +69,18 @@ async function evaluatePrediction(predictionId: string): Promise<boolean | null>
     return null;
   }
 
-  // Determine actual direction
+  // Determine actual direction (any positive movement is UP, any negative is DOWN)
   const actualDirection =
-    priceChange.changePercent > FLAT_THRESHOLD * 100
+    priceChange.changePercent > 0
       ? 'up'
-      : priceChange.changePercent < -FLAT_THRESHOLD * 100
+      : priceChange.changePercent < 0
         ? 'down'
-        : 'flat';
+        : 'flat'; // Exactly 0% - extremely rare, treat as wrong prediction
 
   // Check if prediction was correct
   const wasCorrect =
     actualDirection === 'flat'
-      ? null // Can't be right or wrong if market was flat
+      ? false // If exactly 0% change, prediction was wrong (extremely rare case)
       : prediction.predictedDirection === actualDirection;
 
   // Update prediction
@@ -105,7 +98,7 @@ async function evaluatePrediction(predictionId: string): Promise<boolean | null>
     `[Evaluator] ${prediction.company.ticker} ${prediction.modelType}: ` +
       `Predicted ${prediction.predictedDirection.toUpperCase()}, ` +
       `Actual ${actualDirection.toUpperCase()} (${priceChange.changePercent >= 0 ? '+' : ''}${priceChange.changePercent.toFixed(2)}%) ` +
-      `- ${wasCorrect === null ? 'FLAT' : wasCorrect ? 'CORRECT ✓' : 'WRONG ✗'}`
+      `- ${wasCorrect ? 'CORRECT ✓' : 'WRONG ✗'}`
   );
 
   return wasCorrect;

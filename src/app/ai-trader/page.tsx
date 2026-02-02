@@ -224,26 +224,26 @@ export default function AITraderPage() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div>
-              <p className="text-text-muted text-sm">Total Across All</p>
-              <p className="text-2xl font-bold font-mono-numbers text-text-primary">
+              <p className="text-text-muted text-xs md:text-sm">Total Across All</p>
+              <p className="text-lg md:text-2xl font-bold font-mono-numbers text-text-primary break-all">
                 ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div>
-              <p className="text-text-muted text-sm">Combined P&L</p>
-              <p className={`text-2xl font-bold font-mono-numbers ${totalGainLoss >= 0 ? 'text-positive' : 'text-negative'}`}>
+              <p className="text-text-muted text-xs md:text-sm">Combined P&L</p>
+              <p className={`text-lg md:text-2xl font-bold font-mono-numbers break-all ${totalGainLoss >= 0 ? 'text-positive' : 'text-negative'}`}>
                 {totalGainLoss >= 0 ? '+' : ''}${totalGainLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div>
-              <p className="text-text-muted text-sm">Starting Capital (Each)</p>
-              <p className="text-2xl font-bold font-mono-numbers text-text-secondary">
+              <p className="text-text-muted text-xs md:text-sm">Starting Capital (Each)</p>
+              <p className="text-lg md:text-2xl font-bold font-mono-numbers text-text-secondary">
                 ${portfolios[0]?.portfolio.startingCash.toLocaleString() || '100,000'}
               </p>
             </div>
             <div>
-              <p className="text-text-muted text-sm">Active Portfolios</p>
-              <p className="text-2xl font-bold font-mono-numbers text-primary">
+              <p className="text-text-muted text-xs md:text-sm">Active Portfolios</p>
+              <p className="text-lg md:text-2xl font-bold font-mono-numbers text-primary">
                 {portfolios.length}
               </p>
             </div>
@@ -269,19 +269,19 @@ export default function AITraderPage() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-sm gap-2">
                     <span className="text-text-muted">Value</span>
-                    <span className="font-mono-numbers text-text-primary">
+                    <span className="font-mono-numbers text-text-primary text-xs md:text-sm truncate">
                       ${p.portfolio.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-sm gap-2">
                     <span className="text-text-muted">Return</span>
                     <span className={`font-mono-numbers ${p.portfolio.totalGainLossPercent >= 0 ? 'text-positive' : 'text-negative'}`}>
                       {p.portfolio.totalGainLossPercent >= 0 ? '+' : ''}{p.portfolio.totalGainLossPercent.toFixed(2)}%
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-sm gap-2">
                     <span className="text-text-muted">Positions</span>
                     <span className="font-mono-numbers text-text-secondary">
                       {p.positions.length}
@@ -294,10 +294,10 @@ export default function AITraderPage() {
         </div>
 
         {/* Model Filter Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           <button
             onClick={() => setSelectedModel('all')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
               selectedModel === 'all'
                 ? 'bg-primary text-background'
                 : 'bg-surface border border-border text-text-secondary hover:text-text-primary'
@@ -309,7 +309,7 @@ export default function AITraderPage() {
             <button
               key={model}
               onClick={() => setSelectedModel(model)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors capitalize ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors capitalize whitespace-nowrap flex-shrink-0 ${
                 selectedModel === model
                   ? `${MODEL_BG[model]} ${MODEL_COLORS[model]}`
                   : 'bg-surface border border-border text-text-secondary hover:text-text-primary'
@@ -340,32 +340,32 @@ export default function AITraderPage() {
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div>
-                  <p className="text-text-muted text-sm">Total Value</p>
-                  <p className="text-2xl font-bold font-mono-numbers text-text-primary">
+                  <p className="text-text-muted text-xs md:text-sm">Total Value</p>
+                  <p className="text-lg md:text-2xl font-bold font-mono-numbers text-text-primary break-all">
                     ${p.portfolio.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
-                  <p className="text-text-muted text-sm">Cash Available</p>
-                  <p className="text-2xl font-bold font-mono-numbers text-primary">
+                  <p className="text-text-muted text-xs md:text-sm">Cash Available</p>
+                  <p className="text-lg md:text-2xl font-bold font-mono-numbers text-primary break-all">
                     ${p.portfolio.currentCash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
-                  <p className="text-text-muted text-sm">Starting Capital</p>
-                  <p className="text-2xl font-bold font-mono-numbers text-text-secondary">
+                  <p className="text-text-muted text-xs md:text-sm">Starting Capital</p>
+                  <p className="text-lg md:text-2xl font-bold font-mono-numbers text-text-secondary">
                     ${p.portfolio.startingCash.toLocaleString()}
                   </p>
                 </div>
                 <div>
-                  <p className="text-text-muted text-sm">Total P&L</p>
-                  <p className={`text-2xl font-bold font-mono-numbers ${p.portfolio.totalGainLoss >= 0 ? 'text-positive' : 'text-negative'}`}>
+                  <p className="text-text-muted text-xs md:text-sm">Total P&L</p>
+                  <p className={`text-lg md:text-2xl font-bold font-mono-numbers break-all ${p.portfolio.totalGainLoss >= 0 ? 'text-positive' : 'text-negative'}`}>
                     {p.portfolio.totalGainLoss >= 0 ? '+' : ''}${p.portfolio.totalGainLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
-                  <p className="text-text-muted text-sm">Return</p>
-                  <p className={`text-2xl font-bold font-mono-numbers ${p.portfolio.totalGainLossPercent >= 0 ? 'text-positive' : 'text-negative'}`}>
+                  <p className="text-text-muted text-xs md:text-sm">Return</p>
+                  <p className={`text-lg md:text-2xl font-bold font-mono-numbers ${p.portfolio.totalGainLossPercent >= 0 ? 'text-positive' : 'text-negative'}`}>
                     {p.portfolio.totalGainLossPercent >= 0 ? '+' : ''}{p.portfolio.totalGainLossPercent.toFixed(2)}%
                   </p>
                 </div>

@@ -97,7 +97,7 @@ export async function trackActivePredictions(): Promise<TrackingResult> {
 
         // Calculate current change
         const priceChange = ((currentPrice - baselinePrice) / baselinePrice) * 100;
-        const currentDirection = priceChange > 0.5 ? "up" : priceChange < -0.5 ? "down" : "flat";
+        const currentDirection = priceChange > 0 ? "up" : priceChange < 0 ? "down" : "flat";
 
         // Calculate deviation from prediction
         const predictedChange = prediction.predictedChange || 0;
@@ -113,7 +113,7 @@ export async function trackActivePredictions(): Promise<TrackingResult> {
             currentPrice,
             priceChange,
             deviation,
-            isCorrect: currentDirection !== "flat" ? isCorrect : null,
+            isCorrect: currentDirection !== "flat" ? isCorrect : false, // Flat = wrong prediction
           },
         });
 

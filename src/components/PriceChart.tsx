@@ -27,10 +27,10 @@ interface PriceChartProps {
   ticker: string;
 }
 
-type TimeRange = '7D' | '30D' | '90D';
+type TimeRange = '6H' | '12H' | '1D' | '7D' | '30D' | '90D';
 
 export function PriceChart({ data, ticker }: PriceChartProps) {
-  const [timeRange, setTimeRange] = useState<TimeRange>('30D');
+  const [timeRange, setTimeRange] = useState<TimeRange>('7D');
   const [showVolume, setShowVolume] = useState(true);
 
   if (data.length === 0) {
@@ -43,8 +43,15 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
 
   // Filter data based on time range
   const now = new Date();
-  const daysMap: Record<TimeRange, number> = { '7D': 7, '30D': 30, '90D': 90 };
-  const cutoffDate = new Date(now.getTime() - daysMap[timeRange] * 24 * 60 * 60 * 1000);
+  const hoursMap: Record<TimeRange, number> = {
+    '6H': 6,
+    '12H': 12,
+    '1D': 24,
+    '7D': 24 * 7,
+    '30D': 24 * 30,
+    '90D': 24 * 90,
+  };
+  const cutoffDate = new Date(now.getTime() - hoursMap[timeRange] * 60 * 60 * 1000);
 
   const filteredData = data
     .filter((d) => d.date >= cutoffDate)
@@ -124,18 +131,22 @@ export function PriceChart({ data, ticker }: PriceChartProps) {
             </span>
           </div>
           <p className="text-text-muted text-xs md:text-sm mt-1">
-            {timeRange === '7D' ? 'Last 7 days' : timeRange === '30D' ? 'Last 30 days' : 'Last 90 days'}
+            {timeRange === '6H' ? 'Last 6 hours' :
+             timeRange === '12H' ? 'Last 12 hours' :
+             timeRange === '1D' ? 'Last 24 hours' :
+             timeRange === '7D' ? 'Last 7 days' :
+             timeRange === '30D' ? 'Last 30 days' : 'Last 90 days'}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Time range buttons */}
-          <div className="flex bg-background rounded-lg p-1">
-            {(['7D', '30D', '90D'] as const).map((range) => (
+          <div className="flex bg-background rounded-lg p-1 overflow-x-auto">
+            {(['6H', '12H', '1D', '7D', '30D', '90D'] as const).map((range) => (
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
-                className={`px-2 md:px-3 py-1 text-xs md:text-sm rounded transition-colors ${
+                className={`px-1.5 md:px-3 py-1 text-xs md:text-sm rounded transition-colors whitespace-nowrap ${
                   timeRange === range
                     ? 'bg-primary text-background font-medium'
                     : 'text-text-secondary hover:text-text-primary'
