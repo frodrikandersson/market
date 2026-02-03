@@ -331,6 +331,9 @@ export async function fetchPricesPrioritized(limit: number = 30): Promise<FetchP
     result.evaluated = evaluationStats.evaluated;
     result.evaluatedCorrect = evaluationStats.correct;
     console.log(`[StockPrice] Evaluated ${evaluationStats.evaluated} predictions: ${evaluationStats.correct} correct, ${evaluationStats.incorrect} incorrect`);
+    if (evaluationStats.skipped > 0) {
+      console.log(`[StockPrice] Skipped ${evaluationStats.skipped} predictions (missing price data)`);
+    }
   }
 
   return result;
@@ -339,13 +342,18 @@ export async function fetchPricesPrioritized(limit: number = 30): Promise<FetchP
 /**
  * Evaluate pending predictions for specific companies
  * Used by fetchPricesPrioritized for backlog cleanup
+ *
+ * Uses two strategies:
+ * 1. If prediction has baselinePrice: compare with current price
+ * 2. Otherwise: use historical price comparison (getPriceChange)
  */
 async function evaluatePredictionsForCompanies(companyIds: string[]): Promise<{
   evaluated: number;
   correct: number;
   incorrect: number;
+  skipped: number;
 }> {
-  const stats = { evaluated: 0, correct: 0, incorrect: 0 };
+  const stats = { evaluated: 0, correct: 0, incorrect: 0, skipped: 0 };
 
   // Get pending predictions for these companies
   const now = new Date();
@@ -364,28 +372,41 @@ async function evaluatePredictionsForCompanies(companyIds: string[]): Promise<{
 
   for (const prediction of pendingPredictions) {
     try {
-      // Get price change for the target date
-      const targetDate = new Date(prediction.targetDate);
-      const dayBefore = new Date(targetDate);
-      dayBefore.setDate(dayBefore.getDate() - 1);
+      let actualChange: number | null = null;
+      let actualDirection: 'up' | 'down' | 'flat' | null = null;
 
-      const priceChange = await getPriceChange(
-        prediction.companyId,
-        dayBefore,
-        targetDate
-      );
-
-      if (!priceChange) {
-        continue; // Skip if no price data
+      // Strategy 1: Use baselinePrice + current price
+      if (prediction.baselinePrice) {
+        const latestPrice = await getLatestPrice(prediction.companyId);
+        if (latestPrice) {
+          actualChange = ((latestPrice.close - prediction.baselinePrice) / prediction.baselinePrice) * 100;
+          actualDirection = actualChange > 0.1 ? 'up' : actualChange < -0.1 ? 'down' : 'flat';
+        }
       }
 
-      // Determine actual direction
-      const actualDirection =
-        priceChange.changePercent > 0
-          ? 'up'
-          : priceChange.changePercent < 0
-            ? 'down'
-            : 'flat';
+      // Strategy 2: Fall back to historical price comparison
+      if (!actualDirection) {
+        const targetDate = new Date(prediction.targetDate);
+        const dayBefore = new Date(targetDate);
+        dayBefore.setDate(dayBefore.getDate() - 1);
+
+        const priceChange = await getPriceChange(
+          prediction.companyId,
+          dayBefore,
+          targetDate
+        );
+
+        if (priceChange) {
+          actualChange = priceChange.changePercent;
+          actualDirection = priceChange.changePercent > 0.1 ? 'up' : priceChange.changePercent < -0.1 ? 'down' : 'flat';
+        }
+      }
+
+      // Skip if we couldn't determine direction
+      if (!actualDirection || actualChange === null) {
+        stats.skipped++;
+        continue;
+      }
 
       // Check if prediction was correct
       const wasCorrect =
@@ -398,7 +419,7 @@ async function evaluatePredictionsForCompanies(companyIds: string[]): Promise<{
         where: { id: prediction.id },
         data: {
           actualDirection,
-          actualChange: priceChange.changePercent,
+          actualChange,
           wasCorrect,
           evaluatedAt: new Date(),
         },
@@ -414,7 +435,7 @@ async function evaluatePredictionsForCompanies(companyIds: string[]): Promise<{
       console.log(
         `[Evaluator] ${prediction.company.ticker} ${prediction.modelType}: ` +
         `Predicted ${prediction.predictedDirection.toUpperCase()}, ` +
-        `Actual ${actualDirection.toUpperCase()} (${priceChange.changePercent >= 0 ? '+' : ''}${priceChange.changePercent.toFixed(2)}%) ` +
+        `Actual ${actualDirection.toUpperCase()} (${actualChange >= 0 ? '+' : ''}${actualChange.toFixed(2)}%) ` +
         `- ${wasCorrect ? 'CORRECT' : 'WRONG'}`
       );
     } catch (error) {
