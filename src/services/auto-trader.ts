@@ -658,7 +658,8 @@ async function getAllStatus() {
 
   return {
     portfolios: statuses,
-    config: CONFIG,
+    modelConfigs: MODEL_CONFIGS,
+    sharedConfig: CONFIG,
   };
 }
 

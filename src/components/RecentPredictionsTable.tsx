@@ -975,6 +975,13 @@ function GroupedPredictionCard({ group, isExpanded, onToggle, isPredictionDue }:
   const fundPred = group.fundamentals[selectedFundDate];
   const hypePred = group.hype[selectedHypeDate];
 
+  // Get current price from the most recent prediction that has one
+  const allPreds = [...group.fundamentals, ...group.hype].sort(
+    (a, b) => b.predictionDate.getTime() - a.predictionDate.getTime()
+  );
+  const currentPrice = allPreds.find(p => p.currentPrice !== null)?.currentPrice ?? null;
+  const currentChange = allPreds.find(p => p.currentChange !== null)?.currentChange ?? null;
+
   // Helper to render a model prediction block
   const renderModelPrediction = (
     pred: Prediction | undefined,
@@ -1114,6 +1121,20 @@ function GroupedPredictionCard({ group, isExpanded, onToggle, isPredictionDue }:
               </span>
             )}
           </div>
+          {currentPrice !== null && (
+            <div className="flex items-center gap-1 ml-2">
+              <span className="text-text-primary font-mono-numbers font-semibold">
+                ${currentPrice.toFixed(2)}
+              </span>
+              {currentChange !== null && (
+                <span className={`text-xs font-mono-numbers ${
+                  currentChange > 0 ? 'text-positive' : currentChange < 0 ? 'text-negative' : 'text-text-muted'
+                }`}>
+                  ({currentChange > 0 ? '+' : ''}{currentChange.toFixed(2)}%)
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className="text-text-muted text-xs">

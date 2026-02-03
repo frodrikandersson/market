@@ -51,18 +51,18 @@ interface PortfolioStatus {
   recentTrades: Trade[];
 }
 
-interface Config {
+interface ModelConfig {
   MIN_CONFIDENCE: number;
   HIGH_CONFIDENCE: number;
   POSITION_SIZE_NORMAL: number;
   POSITION_SIZE_HIGH: number;
   MAX_POSITIONS: number;
-  MAX_SINGLE_POSITION: number;
   PROFIT_TARGET: number;
   STOP_LOSS: number;
   MAX_HOLD_DAYS: number;
-  REVERSAL_CONFIDENCE: number;
 }
+
+type ModelConfigs = Record<ModelType, ModelConfig>;
 
 const MODEL_ICONS: Record<ModelType, React.ReactNode> = {
   fundamentals: <Brain className="w-5 h-5" />,
@@ -84,7 +84,7 @@ const MODEL_BG: Record<ModelType, string> = {
 
 export default function AITraderPage() {
   const [portfolios, setPortfolios] = useState<PortfolioStatus[]>([]);
-  const [config, setConfig] = useState<Config | null>(null);
+  const [modelConfigs, setModelConfigs] = useState<ModelConfigs | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +98,7 @@ export default function AITraderPage() {
 
       if (data.success) {
         setPortfolios(data.portfolios);
-        setConfig(data.config);
+        setModelConfigs(data.modelConfigs);
       } else {
         setError(data.error || 'Failed to load AI portfolios');
       }
@@ -509,38 +509,53 @@ export default function AITraderPage() {
           </div>
         ))}
 
-        {/* Trading Config */}
-        {config && (
+        {/* Trading Config - Per Model */}
+        {modelConfigs && (
           <div className="bg-surface rounded-lg border border-border p-6 mt-8">
-            <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-primary" />
-              Trading Rules (All Models)
+              Trading Rules by Model
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
-              <div className="flex flex-col">
-                <span className="text-text-muted">Min Confidence</span>
-                <span className="font-mono-numbers text-text-primary">{(config.MIN_CONFIDENCE * 100).toFixed(0)}%</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-text-muted">Position Size</span>
-                <span className="font-mono-numbers text-text-primary">{(config.POSITION_SIZE_NORMAL * 100).toFixed(0)}%</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-text-muted">Max Positions</span>
-                <span className="font-mono-numbers text-text-primary">{config.MAX_POSITIONS}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-text-muted">Profit Target</span>
-                <span className="font-mono-numbers text-positive">+{(config.PROFIT_TARGET * 100).toFixed(0)}%</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-text-muted">Stop Loss</span>
-                <span className="font-mono-numbers text-negative">{(config.STOP_LOSS * 100).toFixed(0)}%</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-text-muted">Max Hold Days</span>
-                <span className="font-mono-numbers text-text-primary">{config.MAX_HOLD_DAYS}</span>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {(['fundamentals', 'hype', 'combined'] as ModelType[]).map((model) => {
+                const cfg = modelConfigs[model];
+                return (
+                  <div key={model} className={`rounded-lg border p-4 ${MODEL_BG[model]}`}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className={MODEL_COLORS[model]}>
+                        {MODEL_ICONS[model]}
+                      </span>
+                      <h4 className="font-semibold text-text-primary capitalize">{model}</h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex flex-col">
+                        <span className="text-text-muted text-xs">Min Confidence</span>
+                        <span className="font-mono-numbers text-text-primary">{(cfg.MIN_CONFIDENCE * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-text-muted text-xs">Position Size</span>
+                        <span className="font-mono-numbers text-text-primary">{(cfg.POSITION_SIZE_NORMAL * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-text-muted text-xs">Max Positions</span>
+                        <span className="font-mono-numbers text-text-primary">{cfg.MAX_POSITIONS}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-text-muted text-xs">Profit Target</span>
+                        <span className="font-mono-numbers text-positive">+{(cfg.PROFIT_TARGET * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-text-muted text-xs">Stop Loss</span>
+                        <span className="font-mono-numbers text-negative">{(cfg.STOP_LOSS * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-text-muted text-xs">Max Hold Days</span>
+                        <span className="font-mono-numbers text-text-primary">{cfg.MAX_HOLD_DAYS}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
