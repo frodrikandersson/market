@@ -4,7 +4,7 @@
  * Fetches stock prices with intelligent prioritization to ensure
  * predictions can be evaluated quickly.
  *
- * Runs every 5 minutes, fetches ~30 companies per run (~30 seconds).
+ * Runs every 10 minutes, fetches ~150 companies per run.
  * Uses Yahoo Finance which supports all global exchanges.
  *
  * Priority Order:
@@ -112,9 +112,9 @@ export async function GET(request: NextRequest) {
     console.log(`Pending predictions needing evaluation: ${pendingPredictions}`);
     console.log();
 
-    // Fetch prices with smart prioritization (30 companies per run)
+    // Fetch prices with smart prioritization (150 companies per run)
     // Priority: predictions needing prices > no prices > oldest prices
-    const result = await stockPriceService.fetchPricesPrioritized(30);
+    const result = await stockPriceService.fetchPricesPrioritized(150);
 
     results.totalCompanies = totalCompanies;
     results.pendingPredictions = pendingPredictions;
