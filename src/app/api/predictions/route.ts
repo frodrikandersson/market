@@ -102,7 +102,15 @@ export async function GET(request: NextRequest) {
       take: limit,
       include: {
         company: {
-          select: { ticker: true, name: true },
+          select: {
+            ticker: true,
+            name: true,
+            stockPrices: {
+              orderBy: { timestamp: 'desc' },
+              take: 1,
+              select: { close: true },
+            },
+          },
         },
         snapshots: {
           orderBy: { checkedAt: 'desc' },
@@ -114,7 +122,9 @@ export async function GET(request: NextRequest) {
     // Map to response format
     const mappedPredictions = predictions.map((p) => {
       const latestSnapshot = p.snapshots[0];
-      const currentPrice = latestSnapshot?.currentPrice ?? null;
+      // Get price from snapshot, or fall back to latest stock price
+      const latestStockPrice = p.company.stockPrices[0]?.close ?? null;
+      const currentPrice = latestSnapshot?.currentPrice ?? latestStockPrice;
       const currentChange =
         p.baselinePrice && currentPrice
           ? ((currentPrice - p.baselinePrice) / p.baselinePrice) * 100
