@@ -280,9 +280,10 @@ export async function generatePrediction(
 ): Promise<PredictionResult | null> {
   try {
     // Get input factors + current stock price
+    // Use 48-hour window to match the selection criteria in runDailyPredictions()
     const [newsImpact, socialImpact, volatility, momentum, currentPrice] = await Promise.all([
-      getNewsImpact(companyId, 24),
-      getSocialImpact(companyId, 24),
+      getNewsImpact(companyId, 48),
+      getSocialImpact(companyId, 48),
       stockPriceService.calculateVolatility(companyId, 7),
       stockPriceService.calculateMomentum(companyId, 5),
       stockPriceService.fetchQuote(ticker),
@@ -380,7 +381,9 @@ async function storePrediction(prediction: PredictionResult): Promise<void> {
 }
 
 /**
- * Run predictions for all companies with recent news
+ * Run predictions for all companies with recent data
+ * - Fundamentals Model: predicts for companies with recent NEWS
+ * - Hype Model: predicts for companies with recent SOCIAL MEDIA mentions
  */
 export async function runDailyPredictions(): Promise<RunPredictionsResult> {
   const result: RunPredictionsResult = {
@@ -400,22 +403,32 @@ export async function runDailyPredictions(): Promise<RunPredictionsResult> {
     socialImpactScore?: number;
   }> = [];
 
-  // Get companies that have recent news impacts
   const cutoff = new Date();
   cutoff.setHours(cutoff.getHours() - 48); // Look at last 48 hours
 
+  // Get companies with recent NEWS impacts (for Fundamentals model)
   const companiesWithNews = await db.newsImpact.findMany({
     where: { createdAt: { gte: cutoff } },
     select: { companyId: true },
     distinct: ['companyId'],
   });
+  const newsCompanyIds = new Set(companiesWithNews.map((c) => c.companyId));
 
-  const companyIds = companiesWithNews.map((c) => c.companyId);
+  // Get companies with recent SOCIAL mentions (for Hype model)
+  const companiesWithSocial = await db.socialMention.findMany({
+    where: { createdAt: { gte: cutoff } },
+    select: { companyId: true },
+    distinct: ['companyId'],
+  });
+  const socialCompanyIds = new Set(companiesWithSocial.map((c) => c.companyId));
+
+  // Get all unique company IDs that need predictions
+  const allCompanyIds = [...new Set([...newsCompanyIds, ...socialCompanyIds])];
 
   // Get company details (US stocks only - Finnhub free tier limitation)
   const companies = await db.company.findMany({
     where: {
-      id: { in: companyIds },
+      id: { in: allCompanyIds },
       isActive: true,
       ticker: {
         not: {
@@ -426,61 +439,66 @@ export async function runDailyPredictions(): Promise<RunPredictionsResult> {
     select: { id: true, ticker: true, name: true },
   });
 
-  console.log(`[Predictor] Running predictions for ${companies.length} companies`);
+  console.log(`[Predictor] Found ${newsCompanyIds.size} companies with news, ${socialCompanyIds.size} with social mentions`);
+  console.log(`[Predictor] Running predictions for ${companies.length} total companies`);
 
   for (const company of companies) {
-    // Generate Fundamentals prediction
-    try {
-      const fundsPrediction = await generatePrediction(company.id, company.ticker, 'fundamentals');
-      if (fundsPrediction) {
-        await storePrediction(fundsPrediction);
-        result.fundamentalsPredictions++;
-        console.log(
-          `[Predictor] ${company.ticker} Fundamentals: ${fundsPrediction.direction.toUpperCase()} (${(fundsPrediction.confidence * 100).toFixed(0)}%)`
-        );
+    // Generate Fundamentals prediction ONLY if company has news
+    if (newsCompanyIds.has(company.id)) {
+      try {
+        const fundsPrediction = await generatePrediction(company.id, company.ticker, 'fundamentals');
+        if (fundsPrediction) {
+          await storePrediction(fundsPrediction);
+          result.fundamentalsPredictions++;
+          console.log(
+            `[Predictor] ${company.ticker} Fundamentals: ${fundsPrediction.direction.toUpperCase()} (${(fundsPrediction.confidence * 100).toFixed(0)}%)`
+          );
 
-        // Track high-confidence predictions for Discord
-        if (fundsPrediction.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
-          highConfidencePredictions.push({
-            ticker: company.ticker,
-            companyName: company.name,
-            modelType: 'fundamentals',
-            direction: fundsPrediction.direction as 'up' | 'down',
-            confidence: fundsPrediction.confidence,
-            newsImpactScore: fundsPrediction.newsImpactScore ?? undefined,
-          });
+          // Track high-confidence predictions for Discord
+          if (fundsPrediction.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
+            highConfidencePredictions.push({
+              ticker: company.ticker,
+              companyName: company.name,
+              modelType: 'fundamentals',
+              direction: fundsPrediction.direction as 'up' | 'down',
+              confidence: fundsPrediction.confidence,
+              newsImpactScore: fundsPrediction.newsImpactScore ?? undefined,
+            });
+          }
         }
+      } catch (error) {
+        const msg = `${company.ticker} fundamentals: ${error}`;
+        result.errors.push(msg);
       }
-    } catch (error) {
-      const msg = `${company.ticker} fundamentals: ${error}`;
-      result.errors.push(msg);
     }
 
-    // Generate Hype prediction
-    try {
-      const hypePrediction = await generatePrediction(company.id, company.ticker, 'hype');
-      if (hypePrediction) {
-        await storePrediction(hypePrediction);
-        result.hypePredictions++;
-        console.log(
-          `[Predictor] ${company.ticker} Hype: ${hypePrediction.direction.toUpperCase()} (${(hypePrediction.confidence * 100).toFixed(0)}%)`
-        );
+    // Generate Hype prediction ONLY if company has social mentions
+    if (socialCompanyIds.has(company.id)) {
+      try {
+        const hypePrediction = await generatePrediction(company.id, company.ticker, 'hype');
+        if (hypePrediction) {
+          await storePrediction(hypePrediction);
+          result.hypePredictions++;
+          console.log(
+            `[Predictor] ${company.ticker} Hype: ${hypePrediction.direction.toUpperCase()} (${(hypePrediction.confidence * 100).toFixed(0)}%)`
+          );
 
-        // Track high-confidence predictions for Discord
-        if (hypePrediction.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
-          highConfidencePredictions.push({
-            ticker: company.ticker,
-            companyName: company.name,
-            modelType: 'hype',
-            direction: hypePrediction.direction as 'up' | 'down',
-            confidence: hypePrediction.confidence,
-            socialImpactScore: hypePrediction.socialImpactScore ?? undefined,
-          });
+          // Track high-confidence predictions for Discord
+          if (hypePrediction.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
+            highConfidencePredictions.push({
+              ticker: company.ticker,
+              companyName: company.name,
+              modelType: 'hype',
+              direction: hypePrediction.direction as 'up' | 'down',
+              confidence: hypePrediction.confidence,
+              socialImpactScore: hypePrediction.socialImpactScore ?? undefined,
+            });
+          }
         }
+      } catch (error) {
+        const msg = `${company.ticker} hype: ${error}`;
+        result.errors.push(msg);
       }
-    } catch (error) {
-      const msg = `${company.ticker} hype: ${error}`;
-      result.errors.push(msg);
     }
   }
 

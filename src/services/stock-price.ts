@@ -375,11 +375,19 @@ async function evaluatePredictionsForCompanies(companyIds: string[]): Promise<{
       let actualChange: number | null = null;
       let actualDirection: 'up' | 'down' | 'flat' | null = null;
 
-      // Strategy 1: Use baselinePrice + current price
+      // Strategy 1: Use baselinePrice + price on/after target date
       if (prediction.baselinePrice) {
-        const latestPrice = await getLatestPrice(prediction.companyId);
-        if (latestPrice) {
-          actualChange = ((latestPrice.close - prediction.baselinePrice) / prediction.baselinePrice) * 100;
+        // Get price on or after the target date (not just "latest" which could be stale)
+        const targetDatePrice = await db.stockPrice.findFirst({
+          where: {
+            companyId: prediction.companyId,
+            date: { gte: prediction.targetDate },
+          },
+          orderBy: { date: 'asc' }, // Get earliest price >= target date
+        });
+
+        if (targetDatePrice) {
+          actualChange = ((targetDatePrice.close - prediction.baselinePrice) / prediction.baselinePrice) * 100;
           actualDirection = actualChange > 0.1 ? 'up' : actualChange < -0.1 ? 'down' : 'flat';
         }
       }
@@ -603,6 +611,12 @@ export async function getPriceChange(
   ]);
 
   if (!fromPrice || !toPrice) {
+    return null;
+  }
+
+  // If both queries return the same record, we can't calculate a valid change
+  // This happens when there's insufficient price history
+  if (fromPrice.id === toPrice.id) {
     return null;
   }
 

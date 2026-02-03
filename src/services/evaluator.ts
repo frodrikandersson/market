@@ -69,18 +69,18 @@ async function evaluatePrediction(predictionId: string): Promise<boolean | null>
     return null;
   }
 
-  // Determine actual direction (any positive movement is UP, any negative is DOWN)
+  // Determine actual direction (use 0.1% threshold - tiny movements aren't predictable)
   const actualDirection =
-    priceChange.changePercent > 0
+    priceChange.changePercent > 0.1
       ? 'up'
-      : priceChange.changePercent < 0
+      : priceChange.changePercent < -0.1
         ? 'down'
-        : 'flat'; // Exactly 0% - extremely rare, treat as wrong prediction
+        : 'flat'; // Between -0.1% and +0.1% is essentially flat
 
   // Check if prediction was correct
   const wasCorrect =
     actualDirection === 'flat'
-      ? false // If exactly 0% change, prediction was wrong (extremely rare case)
+      ? false // Flat movements are unpredictable, mark as wrong
       : prediction.predictedDirection === actualDirection;
 
   // Update prediction
