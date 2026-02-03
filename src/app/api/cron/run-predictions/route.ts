@@ -9,6 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
+// Set max duration to 15 minutes (900 seconds) for this long-running job
+export const maxDuration = 900;
 import { db } from '@/lib/db';
 import { stockPriceService } from '@/services/stock-price';
 import { predictor } from '@/services/predictor';

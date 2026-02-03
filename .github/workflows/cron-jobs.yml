@@ -122,7 +122,7 @@ jobs:
         run: |
           echo "Generating daily predictions..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 300 \
+          response=$(curl -s -w "\n%{http_code}" -m 900 \
             "${{ secrets.APP_URL }}/api/cron/run-predictions?secret=${{ secrets.CRON_SECRET }}")
 
           http_code=$(echo "$response" | tail -n1)

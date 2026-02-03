@@ -80,9 +80,12 @@ const HYPE_WEIGHTS = {
 };
 
 // Confidence thresholds
-const MIN_CONFIDENCE = 0.3;
+const MIN_CONFIDENCE = 0.4;  // Raised from 0.3 - predictions below 40% aren't useful
 const HIGH_CONFIDENCE_THRESHOLD = 0.7; // Send Discord alerts for predictions above this
 const MAX_CONFIDENCE = 0.95;
+
+// Minimum signal strength to make a prediction (skip weak/neutral signals)
+const MIN_SIGNAL_THRESHOLD = 0.15;
 
 // ===========================================
 // Prediction Algorithms
@@ -107,18 +110,20 @@ function fundamentalsModel(input: PredictionInput): PredictionOutput {
   // Determine direction
   const direction: PredictionDirection = score >= 0 ? 'up' : 'down';
 
-  // Calculate confidence - IMPROVED FORMULA
-  // Higher absolute score = higher confidence
-  // Higher volatility = lower confidence (but reduced penalty)
-  const baseConfidence = Math.abs(score);
+  // Calculate confidence - MORE GENEROUS FORMULA
+  // Scale the signal strength to a useful confidence range
+  // Typical news scores are 0.1-0.6, so we scale up significantly
+  const signalStrength = Math.abs(normalizedNews);
 
-  // Reduced volatility penalty from 0.3 to 0.15 max
-  const volatilityPenalty = volatility ? Math.min(0.15, volatility * 3) : 0;
+  // Reduced volatility penalty
+  const volatilityPenalty = volatility ? Math.min(0.10, volatility * 2) : 0;
 
-  // More generous formula: if you have strong signal, you get high confidence
-  // Old: baseConfidence * 0.8 + 0.2 - volatilityPenalty
-  // New: baseConfidence * 0.95 + 0.25 - volatilityPenalty
-  const rawConfidence = baseConfidence * 0.95 + 0.25 - volatilityPenalty;
+  // New formula: maps signal strength to confidence more generously
+  // 0.15 signal → ~50% confidence
+  // 0.30 signal → ~60% confidence
+  // 0.50 signal → ~75% confidence
+  // 0.70 signal → ~85% confidence
+  const rawConfidence = 0.40 + (signalStrength * 0.70) - volatilityPenalty;
 
   const confidence = Math.max(
     MIN_CONFIDENCE,
@@ -158,12 +163,16 @@ function hypeModel(input: PredictionInput): PredictionOutput {
   // Determine direction
   const direction: PredictionDirection = score >= 0 ? 'up' : 'down';
 
-  // Calculate confidence - IMPROVED FORMULA
-  // Hype model can now reach higher confidence when signal is strong
-  // Old: Math.abs(score) * 0.7 + 0.25, capped at 0.85
-  // New: Math.abs(score) * 0.85 + 0.3, can reach full MAX_CONFIDENCE
-  const baseConfidence = Math.abs(score) * 0.85;
-  const rawConfidence = baseConfidence + 0.3;
+  // Calculate confidence - MORE GENEROUS FORMULA
+  // Scale the social signal strength to a useful confidence range
+  const signalStrength = Math.abs(normalizedSocial);
+
+  // New formula: maps signal strength to confidence more generously
+  // 0.15 signal → ~50% confidence
+  // 0.30 signal → ~60% confidence
+  // 0.50 signal → ~75% confidence
+  // 0.70 signal → ~85% confidence
+  const rawConfidence = 0.40 + (signalStrength * 0.70);
 
   const confidence = Math.max(
     MIN_CONFIDENCE,
@@ -302,6 +311,16 @@ export async function generatePrediction(
     // Skip prediction if no current price available
     if (!currentPrice?.price) {
       console.log(`[Predictor] Skipping ${ticker} - no current price available`);
+      return null;
+    }
+
+    // Skip prediction if signal is too weak (below threshold)
+    const relevantSignal = modelType === 'fundamentals'
+      ? Math.abs(newsImpact.score)
+      : Math.abs(socialImpact.score);
+
+    if (relevantSignal < MIN_SIGNAL_THRESHOLD) {
+      console.log(`[Predictor] Skipping ${ticker} ${modelType} - signal too weak (${relevantSignal.toFixed(3)} < ${MIN_SIGNAL_THRESHOLD})`);
       return null;
     }
 
