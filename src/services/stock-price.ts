@@ -148,62 +148,93 @@ export async function storeDailyPrice(
 
 /**
  * Fetch and store prices with smart prioritization
+ * Priority 0: Companies with unevaluated predictions (need price for evaluation!)
  * Priority 1: Companies with no prices yet
  * Priority 2: Companies with oldest prices (needs update)
  */
-export async function fetchPricesPrioritized(limit: number = 60): Promise<FetchPricesResult> {
+export async function fetchPricesPrioritized(limit: number = 30): Promise<FetchPricesResult> {
   const result: FetchPricesResult = {
     fetched: 0,
     failed: 0,
     errors: [],
   };
 
-  // Priority 1: Companies with no price data at all
-  const companiesNoPrices = await db.company.findMany({
+  const selectedCompanyIds = new Set<string>();
+  const companies: Array<{ id: string; ticker: string }> = [];
+
+  // Priority 0: Companies with unevaluated predictions that need current prices
+  // These are blocking AI Performance evaluation!
+  const predictionsNeedingPrices = await db.prediction.findMany({
     where: {
-      isActive: true,
-      stockPrices: { none: {} },
+      wasCorrect: null, // Not yet evaluated
+      targetDate: { lte: new Date() }, // Target date has passed
     },
-    select: { id: true, ticker: true },
+    select: {
+      companyId: true,
+      company: { select: { id: true, ticker: true, isActive: true } },
+    },
+    distinct: ['companyId'],
     take: limit,
   });
 
-  // Priority 2: Companies with oldest prices (if we have budget left)
-  let companiesOldPrices: Array<{ id: string; ticker: string }> = [];
-  if (companiesNoPrices.length < limit) {
-    const remaining = limit - companiesNoPrices.length;
+  for (const pred of predictionsNeedingPrices) {
+    if (pred.company.isActive && !selectedCompanyIds.has(pred.companyId)) {
+      companies.push({ id: pred.company.id, ticker: pred.company.ticker });
+      selectedCompanyIds.add(pred.companyId);
+    }
+  }
+  const predictionsCount = companies.length;
 
-    // Get companies ordered by oldest price date
-    const companiesWithPrices = await db.company.findMany({
+  // Priority 1: Companies with no price data at all
+  if (companies.length < limit) {
+    const remaining = limit - companies.length;
+    const companiesNoPrices = await db.company.findMany({
       where: {
         isActive: true,
-        stockPrices: { some: {} },
+        stockPrices: { none: {} },
+        id: { notIn: Array.from(selectedCompanyIds) },
       },
-      select: {
-        id: true,
-        ticker: true,
-        stockPrices: {
-          orderBy: { date: 'desc' },
-          take: 1,
-          select: { date: true },
-        },
-      },
+      select: { id: true, ticker: true },
+      take: remaining,
     });
 
-    // Sort by oldest price date
-    companiesOldPrices = companiesWithPrices
-      .sort((a, b) => {
-        const dateA = a.stockPrices[0]?.date.getTime() ?? 0;
-        const dateB = b.stockPrices[0]?.date.getTime() ?? 0;
-        return dateA - dateB; // Oldest first
-      })
-      .slice(0, remaining)
-      .map(c => ({ id: c.id, ticker: c.ticker }));
+    for (const c of companiesNoPrices) {
+      if (!selectedCompanyIds.has(c.id)) {
+        companies.push(c);
+        selectedCompanyIds.add(c.id);
+      }
+    }
   }
+  const noPricesCount = companies.length - predictionsCount;
 
-  const companies = [...companiesNoPrices, ...companiesOldPrices];
+  // Priority 2: Companies with oldest prices (if we have budget left)
+  if (companies.length < limit) {
+    const remaining = limit - companies.length;
 
-  console.log(`[StockPrice] Fetching ${companies.length} prices (${companiesNoPrices.length} new, ${companiesOldPrices.length} updates)`);
+    // Get companies ordered by oldest lastPriceCheckAt
+    const companiesOldPrices = await db.company.findMany({
+      where: {
+        isActive: true,
+        id: { notIn: Array.from(selectedCompanyIds) },
+      },
+      select: { id: true, ticker: true, lastPriceCheckAt: true },
+      orderBy: { lastPriceCheckAt: 'asc' }, // Oldest first (null = never checked)
+      take: remaining,
+    });
+
+    for (const c of companiesOldPrices) {
+      if (!selectedCompanyIds.has(c.id)) {
+        companies.push({ id: c.id, ticker: c.ticker });
+        selectedCompanyIds.add(c.id);
+      }
+    }
+  }
+  const oldPricesCount = companies.length - predictionsCount - noPricesCount;
+
+  console.log(`[StockPrice] Fetching ${companies.length} prices:`);
+  console.log(`  - ${predictionsCount} with pending predictions (PRIORITY)`);
+  console.log(`  - ${noPricesCount} with no price data`);
+  console.log(`  - ${oldPricesCount} with stale prices`);
 
   // Use current timestamp for intraday snapshots
   const now = new Date();

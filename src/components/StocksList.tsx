@@ -177,19 +177,19 @@ export function StocksList({ stocks }: StocksListProps) {
                 </div>
                 <p className="text-sm text-text-secondary truncate mb-2">{stock.name}</p>
                 {stock.price > 0 && (
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono-numbers text-text-primary">
-                      ${stock.price.toFixed(2)}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-mono-numbers text-text-primary text-sm truncate">
+                      ${stock.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                     <span
-                      className={`flex items-center gap-1 text-sm font-mono-numbers ${
+                      className={`flex items-center gap-1 text-xs font-mono-numbers ${
                         stock.priceChange >= 0 ? 'text-positive' : 'text-negative'
                       }`}
                     >
                       {stock.priceChange >= 0 ? (
-                        <TrendingUp className="w-3 h-3" />
+                        <TrendingUp className="w-3 h-3 flex-shrink-0" />
                       ) : (
-                        <TrendingDown className="w-3 h-3" />
+                        <TrendingDown className="w-3 h-3 flex-shrink-0" />
                       )}
                       {stock.priceChange >= 0 ? '+' : ''}
                       {stock.priceChange.toFixed(2)}%

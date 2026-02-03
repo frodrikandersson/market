@@ -5,8 +5,8 @@ on:
     # Fetch data every 30 minutes
     - cron: '*/30 * * * *'
 
-    # Fetch stock prices every 1 hour (all companies)
-    - cron: '0 * * * *'
+    # Fetch stock prices every 5 minutes (prioritized batch of 30)
+    - cron: '*/5 * * * *'
 
     # Backlog processor every 2 hours
     - cron: '0 */2 * * *'
@@ -64,15 +64,15 @@ jobs:
 
   fetch-prices:
     runs-on: ubuntu-latest
-    # Run every 1 hour or when manually triggered
-    if: github.event.schedule == '0 * * * *' || github.event.inputs.job == 'fetch-prices' || github.event.inputs.job == 'all'
+    # Run every 5 minutes (prioritized batch) or when manually triggered
+    if: github.event.schedule == '*/5 * * * *' || github.event.inputs.job == 'fetch-prices' || github.event.inputs.job == 'all'
 
     steps:
-      - name: Fetch Stock Prices (All Companies)
+      - name: Fetch Stock Prices (Prioritized Batch)
         run: |
-          echo "Fetching stock prices for all active companies..."
+          echo "Fetching stock prices (prioritized: predictions > new > stale)..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 300 \
+          response=$(curl -s -w "\n%{http_code}" -m 120 \
             "${{ secrets.APP_URL }}/api/cron/fetch-prices?secret=${{ secrets.CRON_SECRET }}")
 
           http_code=$(echo "$response" | tail -n1)

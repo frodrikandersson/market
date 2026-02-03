@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Filter, X } from 'lucide-react';
+import { Filter, X, ChevronDown, Calendar } from 'lucide-react';
 import Link from 'next/link';
 
 interface Prediction {
@@ -30,6 +30,16 @@ interface RecentPredictionsTableProps {
 type ModelFilter = 'all' | 'fundamentals' | 'hype';
 type ResultFilter = 'all' | 'correct' | 'wrong' | 'pending';
 type DirectionFilter = 'all' | 'up' | 'down';
+type DateRangeType = 'all' | '7d' | '30d' | '90d' | 'custom';
+type ViewMode = 'list' | 'grouped';
+
+// Group predictions by company ticker
+interface GroupedPredictions {
+  ticker: string;
+  fundamentals: Prediction[];
+  hype: Prediction[];
+  latestDate: Date;
+}
 
 export function RecentPredictionsTable({ predictions }: RecentPredictionsTableProps) {
   const [showFilters, setShowFilters] = useState(false);
@@ -37,7 +47,11 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
   const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>('all');
   const [minConfidence, setMinConfidence] = useState<number>(0);
-  const [dateRange, setDateRange] = useState<'all' | '7d' | '30d' | '90d'>('all');
+  const [dateRange, setDateRange] = useState<DateRangeType>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [viewMode, setViewMode] = useState<ViewMode>('grouped');
+  const [expandedTickers, setExpandedTickers] = useState<Set<string>>(new Set());
 
   // Filter predictions
   const filteredPredictions = useMemo(() => {
@@ -68,7 +82,19 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
     filtered = filtered.filter((p) => p.confidence * 100 >= minConfidence);
 
     // Date range filter
-    if (dateRange !== 'all') {
+    if (dateRange === 'custom') {
+      // Custom date range
+      if (customStartDate) {
+        const startDate = new Date(customStartDate);
+        startDate.setHours(0, 0, 0, 0);
+        filtered = filtered.filter((p) => p.predictionDate >= startDate);
+      }
+      if (customEndDate) {
+        const endDate = new Date(customEndDate);
+        endDate.setHours(23, 59, 59, 999);
+        filtered = filtered.filter((p) => p.predictionDate <= endDate);
+      }
+    } else if (dateRange !== 'all') {
       const now = new Date();
       const daysMap = { '7d': 7, '30d': 30, '90d': 90 };
       const cutoffDate = new Date(now.getTime() - daysMap[dateRange] * 24 * 60 * 60 * 1000);
@@ -76,14 +102,64 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
     }
 
     return filtered;
-  }, [predictions, modelFilter, resultFilter, directionFilter, minConfidence, dateRange]);
+  }, [predictions, modelFilter, resultFilter, directionFilter, minConfidence, dateRange, customStartDate, customEndDate]);
+
+  // Group predictions by company ticker
+  const groupedPredictions = useMemo(() => {
+    const groups: Record<string, GroupedPredictions> = {};
+
+    for (const pred of filteredPredictions) {
+      if (!groups[pred.ticker]) {
+        groups[pred.ticker] = {
+          ticker: pred.ticker,
+          fundamentals: [],
+          hype: [],
+          latestDate: pred.predictionDate,
+        };
+      }
+
+      if (pred.modelType === 'fundamentals') {
+        groups[pred.ticker].fundamentals.push(pred);
+      } else {
+        groups[pred.ticker].hype.push(pred);
+      }
+
+      // Track latest prediction date for sorting
+      if (pred.predictionDate > groups[pred.ticker].latestDate) {
+        groups[pred.ticker].latestDate = pred.predictionDate;
+      }
+    }
+
+    // Sort each model's predictions by date (newest first)
+    for (const group of Object.values(groups)) {
+      group.fundamentals.sort((a, b) => b.predictionDate.getTime() - a.predictionDate.getTime());
+      group.hype.sort((a, b) => b.predictionDate.getTime() - a.predictionDate.getTime());
+    }
+
+    // Return sorted by latest date
+    return Object.values(groups).sort((a, b) => b.latestDate.getTime() - a.latestDate.getTime());
+  }, [filteredPredictions]);
+
+  const toggleExpandedTicker = (ticker: string) => {
+    setExpandedTickers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(ticker)) {
+        newSet.delete(ticker);
+      } else {
+        newSet.add(ticker);
+      }
+      return newSet;
+    });
+  };
 
   const hasActiveFilters =
     modelFilter !== 'all' ||
     resultFilter !== 'all' ||
     directionFilter !== 'all' ||
     minConfidence > 0 ||
-    dateRange !== 'all';
+    dateRange !== 'all' ||
+    customStartDate !== '' ||
+    customEndDate !== '';
 
   const clearFilters = () => {
     setModelFilter('all');
@@ -91,6 +167,8 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
     setDirectionFilter('all');
     setMinConfidence(0);
     setDateRange('all');
+    setCustomStartDate('');
+    setCustomEndDate('');
   };
 
   // Check if prediction target time has passed
@@ -137,21 +215,77 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
       {/* Filters Panel */}
       {showFilters && (
         <div className="bg-background border border-border rounded-lg p-4 mb-4 space-y-4">
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-2 pb-3 border-b border-border/50">
+            <span className="text-xs text-text-muted">View:</span>
+            <button
+              onClick={() => setViewMode('grouped')}
+              className={`px-3 py-1 text-xs rounded transition-colors ${
+                viewMode === 'grouped'
+                  ? 'bg-primary/20 text-primary border border-primary/30'
+                  : 'bg-surface text-text-secondary border border-border hover:border-primary/30'
+              }`}
+            >
+              Grouped by Stock
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1 text-xs rounded transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-primary/20 text-primary border border-primary/30'
+                  : 'bg-surface text-text-secondary border border-border hover:border-primary/30'
+              }`}
+            >
+              List View
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Date Range Filter */}
             <div>
               <label className="text-xs text-text-muted block mb-2">Date Range</label>
               <select
                 value={dateRange}
-                onChange={(e) => setDateRange(e.target.value as typeof dateRange)}
+                onChange={(e) => setDateRange(e.target.value as DateRangeType)}
                 className="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
               >
                 <option value="all">All Time</option>
                 <option value="7d">Last 7 Days</option>
                 <option value="30d">Last 30 Days</option>
                 <option value="90d">Last 90 Days</option>
+                <option value="custom">Custom Range</option>
               </select>
             </div>
+
+            {/* Custom Date Range Inputs */}
+            {dateRange === 'custom' && (
+              <>
+                <div>
+                  <label className="text-xs text-text-muted block mb-2">
+                    <Calendar className="w-3 h-3 inline mr-1" />
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-text-muted block mb-2">
+                    <Calendar className="w-3 h-3 inline mr-1" />
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Model Filter */}
             <div>
@@ -215,8 +349,23 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
         </div>
       )}
 
-      {/* Mobile: Card Layout */}
-      {filteredPredictions.length > 0 ? (
+      {/* Grouped View */}
+      {viewMode === 'grouped' && groupedPredictions.length > 0 && (
+        <div className="space-y-4">
+          {groupedPredictions.map((group) => (
+            <GroupedPredictionCard
+              key={group.ticker}
+              group={group}
+              isExpanded={expandedTickers.has(group.ticker)}
+              onToggle={() => toggleExpandedTicker(group.ticker)}
+              isPredictionDue={isPredictionDue}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* List View - Mobile: Card Layout */}
+      {viewMode === 'list' && filteredPredictions.length > 0 ? (
         <>
           {/* Mobile Cards (< lg) */}
           <div className="lg:hidden space-y-3">
@@ -582,13 +731,200 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
             </table>
           </div>
         </>
-      ) : (
+      ) : viewMode === 'list' ? (
         <div className="text-center py-12">
           <p className="text-text-muted text-sm">
             {hasActiveFilters
               ? 'No predictions match your filters'
               : 'No predictions available yet'}
           </p>
+        </div>
+      ) : null}
+
+      {/* Empty state for grouped view */}
+      {viewMode === 'grouped' && groupedPredictions.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-text-muted text-sm">
+            {hasActiveFilters
+              ? 'No predictions match your filters'
+              : 'No predictions available yet'}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Grouped Prediction Card Component
+interface GroupedPredictionCardProps {
+  group: GroupedPredictions;
+  isExpanded: boolean;
+  onToggle: () => void;
+  isPredictionDue: (pred: Prediction) => boolean;
+}
+
+function GroupedPredictionCard({ group, isExpanded, onToggle, isPredictionDue }: GroupedPredictionCardProps) {
+  const [selectedFundDate, setSelectedFundDate] = useState(0);
+  const [selectedHypeDate, setSelectedHypeDate] = useState(0);
+
+  const fundPred = group.fundamentals[selectedFundDate];
+  const hypePred = group.hype[selectedHypeDate];
+
+  // Helper to render a model prediction block
+  const renderModelPrediction = (
+    pred: Prediction | undefined,
+    modelType: 'fundamentals' | 'hype',
+    allPredictions: Prediction[],
+    selectedIndex: number,
+    setSelectedIndex: (i: number) => void
+  ) => {
+    if (!pred) {
+      return (
+        <div className={`flex-1 p-3 rounded-lg bg-background/50 border ${
+          modelType === 'fundamentals' ? 'border-primary/20' : 'border-secondary/20'
+        }`}>
+          <div className="text-xs text-text-muted mb-2">
+            {modelType === 'fundamentals' ? 'FUNDAMENTALS' : 'HYPE MODEL'}
+          </div>
+          <div className="text-text-muted text-sm">No prediction</div>
+        </div>
+      );
+    }
+
+    const isDue = isPredictionDue(pred);
+
+    return (
+      <div className={`flex-1 p-3 rounded-lg ${
+        modelType === 'fundamentals'
+          ? 'bg-primary/5 border border-primary/20'
+          : 'bg-secondary/5 border border-secondary/20'
+      }`}>
+        {/* Model Header with Date Selector */}
+        <div className="flex items-center justify-between mb-2">
+          <span className={`text-xs font-semibold ${
+            modelType === 'fundamentals' ? 'text-primary' : 'text-secondary'
+          }`}>
+            {modelType === 'fundamentals' ? 'FUNDAMENTALS' : 'HYPE MODEL'}
+          </span>
+          {allPredictions.length > 1 && (
+            <select
+              value={selectedIndex}
+              onChange={(e) => setSelectedIndex(parseInt(e.target.value))}
+              className="text-xs bg-surface border border-border rounded px-1 py-0.5 text-text-secondary focus:outline-none focus:border-primary"
+            >
+              {allPredictions.map((p, i) => (
+                <option key={i} value={i}>
+                  {p.predictionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Direction + Result */}
+        <div className="flex items-center justify-between mb-2">
+          <span className={`font-semibold ${
+            pred.predictedDirection === 'up' ? 'text-positive' : 'text-negative'
+          }`}>
+            {pred.predictedDirection === 'up' ? '▲ UP' : '▼ DOWN'}
+          </span>
+          {pred.wasCorrect !== null && isDue ? (
+            <span className={`px-2 py-0.5 rounded text-xs ${
+              pred.wasCorrect
+                ? 'bg-positive/20 text-positive'
+                : 'bg-negative/20 text-negative'
+            }`}>
+              {pred.wasCorrect ? '✓' : '✗'}
+            </span>
+          ) : (
+            <span className="text-text-muted text-xs">Pending</span>
+          )}
+        </div>
+
+        {/* Baseline Price */}
+        {pred.baselinePrice && (
+          <div className="text-text-muted text-xs mb-1">
+            from ${pred.baselinePrice.toFixed(2)}
+          </div>
+        )}
+
+        {/* Predicted Change */}
+        {pred.predictedChange !== null && (
+          <div className={`text-xs ${modelType === 'fundamentals' ? 'text-primary/70' : 'text-secondary/70'}`}>
+            Expected: {pred.predictedChange > 0 ? '+' : ''}{pred.predictedChange.toFixed(2)}%
+          </div>
+        )}
+
+        {/* Actual Result */}
+        {pred.actualDirection && (
+          <div className="mt-2 pt-2 border-t border-border/50">
+            <span className={`text-xs ${
+              pred.actualDirection === 'up' ? 'text-positive' : pred.actualDirection === 'down' ? 'text-negative' : 'text-text-muted'
+            }`}>
+              Actual: {pred.actualDirection === 'up' ? '▲' : pred.actualDirection === 'down' ? '▼' : '━'} {pred.actualChange !== null ? `${pred.actualChange > 0 ? '+' : ''}${pred.actualChange.toFixed(2)}%` : ''}
+            </span>
+          </div>
+        )}
+
+        {/* Confidence */}
+        <div className="mt-2 flex items-center gap-2">
+          <div className="flex-1 h-1 bg-surface rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full ${modelType === 'fundamentals' ? 'bg-primary' : 'bg-secondary'}`}
+              style={{ width: `${pred.confidence * 100}%` }}
+            />
+          </div>
+          <span className="font-mono-numbers text-text-muted text-xs">
+            {(pred.confidence * 100).toFixed(0)}%
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-background border border-border rounded-lg overflow-hidden hover:border-primary/30 transition-colors">
+      {/* Card Header - Always Visible */}
+      <div
+        className="p-4 cursor-pointer flex items-center justify-between"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/stock/${group.ticker}`}
+            className="text-xl font-bold text-text-primary hover:text-primary transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {group.ticker}
+          </Link>
+          <div className="flex items-center gap-1">
+            {group.fundamentals.length > 0 && (
+              <span className="px-2 py-0.5 rounded text-xs bg-primary/20 text-primary">
+                Fund ({group.fundamentals.length})
+              </span>
+            )}
+            {group.hype.length > 0 && (
+              <span className="px-2 py-0.5 rounded text-xs bg-secondary/20 text-secondary">
+                Hype ({group.hype.length})
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-text-muted text-xs">
+            Latest: {group.latestDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </span>
+          <ChevronDown className={`w-4 h-4 text-text-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+        </div>
+      </div>
+
+      {/* Expanded Content */}
+      {isExpanded && (
+        <div className="px-4 pb-4 pt-0">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {renderModelPrediction(fundPred, 'fundamentals', group.fundamentals, selectedFundDate, setSelectedFundDate)}
+            {renderModelPrediction(hypePred, 'hype', group.hype, selectedHypeDate, setSelectedHypeDate)}
+          </div>
         </div>
       )}
     </div>

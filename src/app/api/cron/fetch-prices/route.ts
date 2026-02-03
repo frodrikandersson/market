@@ -1,21 +1,21 @@
 /**
- * Cron Endpoint: Stock Price Fetcher (All Companies)
- * ===================================================
- * Fetches stock prices for ALL active companies in the database.
+ * Cron Endpoint: Stock Price Fetcher (Smart Prioritization)
+ * ==========================================================
+ * Fetches stock prices with intelligent prioritization to ensure
+ * predictions can be evaluated quickly.
  *
- * Runs every 1 hour, fetches all companies in one run (~1-2 minutes total).
- * Uses Yahoo Finance which supports all global exchanges (US, Canada, UK, Australia, Europe, etc.)
+ * Runs every 5 minutes, fetches ~30 companies per run (~30 seconds).
+ * Uses Yahoo Finance which supports all global exchanges.
+ *
+ * Priority Order:
+ * 1. Companies with unevaluated predictions (need prices for AI Performance!)
+ * 2. Companies with no price data yet
+ * 3. Companies with oldest/stale prices
  *
  * This ensures:
- * - All companies get fresh prices every hour
- * - New companies get prices within 1 hour of discovery
- * - No rate limit issues (Yahoo Finance has no official limits)
- *
- * Workflow:
- * 1. Fetch current quotes for ALL active companies
- * 2. Store as daily OHLCV data
- * 3. Small delay between requests (100ms) to be respectful
- * 4. Completes in ~1-2 minutes for 600+ companies
+ * - Predictions get evaluated within minutes, not hours
+ * - New companies get prices quickly
+ * - All companies stay reasonably fresh
  *
  * Usage:
  *   GET /api/cron/fetch-prices?secret=YOUR_CRON_SECRET
@@ -102,16 +102,22 @@ export async function GET(request: NextRequest) {
         stockPrices: { some: {} },
       },
     });
+    const pendingPredictions = await db.prediction.count({
+      where: { wasCorrect: null, targetDate: { lte: new Date() } },
+    });
 
     console.log(`Active companies: ${totalCompanies}`);
     console.log(`With price data: ${companiesWithPrices}`);
     console.log(`Without prices: ${totalCompanies - companiesWithPrices}`);
+    console.log(`Pending predictions needing evaluation: ${pendingPredictions}`);
     console.log();
 
-    // Fetch ALL prices (no limit)
-    const result = await stockPriceService.fetchAllPrices();
+    // Fetch prices with smart prioritization (30 companies per run)
+    // Priority: predictions needing prices > no prices > oldest prices
+    const result = await stockPriceService.fetchPricesPrioritized(30);
 
     results.totalCompanies = totalCompanies;
+    results.pendingPredictions = pendingPredictions;
     results.pricesFetched = result.fetched;
     results.pricesFailed = result.failed;
     results.errors = result.errors.slice(0, 10); // Only first 10 errors
