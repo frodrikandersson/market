@@ -221,8 +221,9 @@ export function CalibrationChart({ data }: CalibrationChartProps) {
           Dotted line = perfect calibration
         </p>
       </div>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data}>
+      <div className="h-[200px] md:h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" />
           <XAxis
             dataKey="bucket"
@@ -279,8 +280,9 @@ export function CalibrationChart({ data }: CalibrationChartProps) {
             activeDot={{ r: 6, fill: '#7b61ff' }}
             name="Hype Model"
           />
-        </LineChart>
-      </ResponsiveContainer>
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
       <p className="text-xs text-text-muted mt-2 text-center">
         If a model predicts with 70% confidence, it should be correct ~70% of the time
       </p>
