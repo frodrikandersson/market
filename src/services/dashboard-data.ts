@@ -18,7 +18,13 @@ import type { Sentiment, EventCategory } from '@/types';
 
 export interface DashboardStats {
   fundamentalsAccuracy: number;
+  fundamentalsCorrect: number;
+  fundamentalsEvaluated: number;
+  fundamentalsPending: number;
   hypeAccuracy: number;
+  hypeCorrect: number;
+  hypeEvaluated: number;
+  hypePending: number;
   totalPredictions: number;
   todayPredictions: number;
   articlesProcessed: number;
@@ -126,27 +132,38 @@ export async function getStats(): Promise<DashboardStats> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Get prediction accuracy
-  const [fundamentalsPredictions, hypePredictions] = await Promise.all([
+  // Get prediction accuracy and counts for both models
+  const [
+    fundamentalsEvaluated,
+    fundamentalsPending,
+    hypeEvaluated,
+    hypePending,
+  ] = await Promise.all([
     db.prediction.findMany({
       where: { modelType: 'fundamentals', wasCorrect: { not: null } },
       select: { wasCorrect: true },
+    }),
+    db.prediction.count({
+      where: { modelType: 'fundamentals', wasCorrect: null },
     }),
     db.prediction.findMany({
       where: { modelType: 'hype', wasCorrect: { not: null } },
       select: { wasCorrect: true },
     }),
+    db.prediction.count({
+      where: { modelType: 'hype', wasCorrect: null },
+    }),
   ]);
 
-  const fundamentalsCorrect = fundamentalsPredictions.filter((p) => p.wasCorrect).length;
-  const hypeCorrect = hypePredictions.filter((p) => p.wasCorrect).length;
+  const fundamentalsCorrect = fundamentalsEvaluated.filter((p) => p.wasCorrect).length;
+  const hypeCorrect = hypeEvaluated.filter((p) => p.wasCorrect).length;
 
   const fundamentalsAccuracy =
-    fundamentalsPredictions.length > 0
-      ? (fundamentalsCorrect / fundamentalsPredictions.length) * 100
+    fundamentalsEvaluated.length > 0
+      ? (fundamentalsCorrect / fundamentalsEvaluated.length) * 100
       : 0;
   const hypeAccuracy =
-    hypePredictions.length > 0 ? (hypeCorrect / hypePredictions.length) * 100 : 0;
+    hypeEvaluated.length > 0 ? (hypeCorrect / hypeEvaluated.length) * 100 : 0;
 
   // Get counts
   const [totalPredictions, todayPredictions, articlesProcessed, articlesFetched, eventsToday, socialPostsToday, redditPostsToday, blueskyPostsToday] =
@@ -172,8 +189,14 @@ export async function getStats(): Promise<DashboardStats> {
     ]);
 
   return {
-    fundamentalsAccuracy: fundamentalsAccuracy || 67.3, // Placeholder if no data
-    hypeAccuracy: hypeAccuracy || 54.2, // Placeholder if no data
+    fundamentalsAccuracy,
+    fundamentalsCorrect,
+    fundamentalsEvaluated: fundamentalsEvaluated.length,
+    fundamentalsPending,
+    hypeAccuracy,
+    hypeCorrect,
+    hypeEvaluated: hypeEvaluated.length,
+    hypePending,
     totalPredictions,
     todayPredictions,
     articlesProcessed,
@@ -569,7 +592,13 @@ export async function getDashboardData(): Promise<DashboardData> {
     return {
       stats: {
         fundamentalsAccuracy: 0,
+        fundamentalsCorrect: 0,
+        fundamentalsEvaluated: 0,
+        fundamentalsPending: 0,
         hypeAccuracy: 0,
+        hypeCorrect: 0,
+        hypeEvaluated: 0,
+        hypePending: 0,
         totalPredictions: 0,
         todayPredictions: 0,
         articlesProcessed: 0,

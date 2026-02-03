@@ -23,13 +23,13 @@ export default async function Home() {
           <StatCard
             label="Fundamentals Accuracy"
             value={`${data.stats.fundamentalsAccuracy.toFixed(1)}%`}
-            subtext={`${data.stats.totalPredictions} total predictions`}
+            subtext={`${data.stats.fundamentalsCorrect}/${data.stats.fundamentalsEvaluated} correct · ${data.stats.fundamentalsPending} pending`}
             icon={<BarChart3 className="w-5 h-5" />}
           />
           <StatCard
             label="Hype Model Accuracy"
             value={`${data.stats.hypeAccuracy.toFixed(1)}%`}
-            subtext={`${data.stats.totalPredictions} total predictions`}
+            subtext={`${data.stats.hypeCorrect}/${data.stats.hypeEvaluated} correct · ${data.stats.hypePending} pending`}
             icon={<Activity className="w-5 h-5" />}
             variant="secondary"
           />
@@ -120,7 +120,7 @@ export default async function Home() {
                 </div>
               </div>
               <p className="text-xs text-text-muted mt-4">
-                Based on {data.stats.totalPredictions} total predictions
+                Fundamentals: {data.stats.fundamentalsCorrect}/{data.stats.fundamentalsEvaluated} evaluated · Hype: {data.stats.hypeCorrect}/{data.stats.hypeEvaluated} evaluated
               </p>
             </div>
 
