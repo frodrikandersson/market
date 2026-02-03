@@ -4,6 +4,8 @@
  * Fetches and stores stock prices from Yahoo Finance.
  * Supports all global exchanges (US, Canada, UK, Australia, Europe, etc.)
  *
+ * Also evaluates pending predictions after fetching prices (backlog cleanup).
+ *
  * Usage:
  *   import { stockPriceService } from '@/services/stock-price';
  *   await stockPriceService.fetchAllPrices();
@@ -31,6 +33,8 @@ export interface FetchPricesResult {
   fetched: number;
   failed: number;
   errors: string[];
+  evaluated?: number;
+  evaluatedCorrect?: number;
 }
 
 // ===========================================
@@ -316,7 +320,109 @@ export async function fetchPricesPrioritized(limit: number = 30): Promise<FetchP
   }
 
   console.log(`[StockPrice] Fetched ${result.fetched}, failed ${result.failed}`);
+
+  // BACKLOG CLEANUP: Evaluate pending predictions for companies we just fetched
+  // This prevents backlog from accumulating and timing out the run-predictions cron
+  if (predictionsCount > 0) {
+    console.log(`[StockPrice] Evaluating pending predictions as backlog cleanup...`);
+    const evaluationStats = await evaluatePredictionsForCompanies(
+      Array.from(selectedCompanyIds).slice(0, predictionsCount)
+    );
+    result.evaluated = evaluationStats.evaluated;
+    result.evaluatedCorrect = evaluationStats.correct;
+    console.log(`[StockPrice] Evaluated ${evaluationStats.evaluated} predictions: ${evaluationStats.correct} correct, ${evaluationStats.incorrect} incorrect`);
+  }
+
   return result;
+}
+
+/**
+ * Evaluate pending predictions for specific companies
+ * Used by fetchPricesPrioritized for backlog cleanup
+ */
+async function evaluatePredictionsForCompanies(companyIds: string[]): Promise<{
+  evaluated: number;
+  correct: number;
+  incorrect: number;
+}> {
+  const stats = { evaluated: 0, correct: 0, incorrect: 0 };
+
+  // Get pending predictions for these companies
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+  const pendingPredictions = await db.prediction.findMany({
+    where: {
+      companyId: { in: companyIds },
+      wasCorrect: null,
+      targetDate: { lt: today },
+    },
+    include: {
+      company: { select: { id: true, ticker: true } },
+    },
+  });
+
+  for (const prediction of pendingPredictions) {
+    try {
+      // Get price change for the target date
+      const targetDate = new Date(prediction.targetDate);
+      const dayBefore = new Date(targetDate);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+
+      const priceChange = await getPriceChange(
+        prediction.companyId,
+        dayBefore,
+        targetDate
+      );
+
+      if (!priceChange) {
+        continue; // Skip if no price data
+      }
+
+      // Determine actual direction
+      const actualDirection =
+        priceChange.changePercent > 0
+          ? 'up'
+          : priceChange.changePercent < 0
+            ? 'down'
+            : 'flat';
+
+      // Check if prediction was correct
+      const wasCorrect =
+        actualDirection === 'flat'
+          ? false
+          : prediction.predictedDirection === actualDirection;
+
+      // Update prediction
+      await db.prediction.update({
+        where: { id: prediction.id },
+        data: {
+          actualDirection,
+          actualChange: priceChange.changePercent,
+          wasCorrect,
+          evaluatedAt: new Date(),
+        },
+      });
+
+      stats.evaluated++;
+      if (wasCorrect) {
+        stats.correct++;
+      } else {
+        stats.incorrect++;
+      }
+
+      console.log(
+        `[Evaluator] ${prediction.company.ticker} ${prediction.modelType}: ` +
+        `Predicted ${prediction.predictedDirection.toUpperCase()}, ` +
+        `Actual ${actualDirection.toUpperCase()} (${priceChange.changePercent >= 0 ? '+' : ''}${priceChange.changePercent.toFixed(2)}%) ` +
+        `- ${wasCorrect ? 'CORRECT' : 'WRONG'}`
+      );
+    } catch (error) {
+      console.error(`[Evaluator] Error evaluating ${prediction.company.ticker}:`, error);
+    }
+  }
+
+  return stats;
 }
 
 /**

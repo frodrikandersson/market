@@ -1,8 +1,8 @@
 /**
- * Cron Endpoint: Stock Price Fetcher (Smart Prioritization)
- * ==========================================================
- * Fetches stock prices with intelligent prioritization to ensure
- * predictions can be evaluated quickly.
+ * Cron Endpoint: Stock Price Fetcher (Smart Prioritization + Backlog Cleanup)
+ * ===========================================================================
+ * Fetches stock prices with intelligent prioritization AND evaluates
+ * predictions as a backlog cleanup mechanism.
  *
  * Runs every 10 minutes, fetches ~150 companies per run.
  * Uses Yahoo Finance which supports all global exchanges.
@@ -12,10 +12,15 @@
  * 2. Companies with no price data yet
  * 3. Companies with oldest/stale prices
  *
+ * BACKLOG CLEANUP: After fetching prices for companies with pending predictions,
+ * immediately evaluates those predictions. This prevents the run-predictions
+ * cron from having to evaluate a huge backlog at once.
+ *
  * This ensures:
  * - Predictions get evaluated within minutes, not hours
  * - New companies get prices quickly
  * - All companies stay reasonably fresh
+ * - Backlog never accumulates to timeout-causing levels
  *
  * Usage:
  *   GET /api/cron/fetch-prices?secret=YOUR_CRON_SECRET
@@ -120,18 +125,30 @@ export async function GET(request: NextRequest) {
     results.pendingPredictions = pendingPredictions;
     results.pricesFetched = result.fetched;
     results.pricesFailed = result.failed;
+    results.predictionsEvaluated = result.evaluated ?? 0;
+    results.predictionsCorrect = result.evaluatedCorrect ?? 0;
     results.errors = result.errors.slice(0, 10); // Only first 10 errors
 
     const duration = Date.now() - startTime;
     results.durationMs = duration;
 
+    // Get remaining pending predictions after cleanup
+    const remainingPending = await db.prediction.count({
+      where: { wasCorrect: null, targetDate: { lte: new Date() } },
+    });
+    results.pendingRemaining = remainingPending;
+
     await logCronJob('fetch-prices', 'completed', results);
 
     console.log('\n╔════════════════════════════════════════╗');
     console.log(`║    STOCK PRICES - Complete             ║`);
-    console.log(`║    Fetched: ${result.fetched}/${totalCompanies}                      ║`);
-    console.log(`║    Failed: ${result.failed}                        ║`);
-    console.log(`║    Duration: ${(duration / 1000).toFixed(1)}s                    ║`);
+    console.log(`║    Fetched: ${result.fetched}/${totalCompanies}`.padEnd(41) + '║');
+    console.log(`║    Failed: ${result.failed}`.padEnd(41) + '║');
+    if (result.evaluated) {
+      console.log(`║    Evaluated: ${result.evaluated} (${result.evaluatedCorrect} correct)`.padEnd(41) + '║');
+      console.log(`║    Pending remaining: ${remainingPending}`.padEnd(41) + '║');
+    }
+    console.log(`║    Duration: ${(duration / 1000).toFixed(1)}s`.padEnd(41) + '║');
     console.log('╚════════════════════════════════════════╝\n');
 
     return NextResponse.json({

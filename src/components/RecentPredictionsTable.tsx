@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Filter, X, ChevronDown, Calendar, Search } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Filter, X, ChevronDown, Calendar, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface Prediction {
@@ -23,8 +23,13 @@ interface Prediction {
   currentChange: number | null;
 }
 
-interface RecentPredictionsTableProps {
-  predictions: Prediction[];
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
 }
 
 type ModelFilter = 'all' | 'fundamentals' | 'hype';
@@ -41,7 +46,31 @@ interface GroupedPredictions {
   latestDate: Date;
 }
 
-export function RecentPredictionsTable({ predictions }: RecentPredictionsTableProps) {
+const ITEMS_PER_PAGE = 50;
+
+// Debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+export function RecentPredictionsTable() {
+  const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [modelFilter, setModelFilter] = useState<ModelFilter>('all');
@@ -53,69 +82,102 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const [expandedTickers, setExpandedTickers] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter predictions
-  const filteredPredictions = useMemo(() => {
-    let filtered = [...predictions];
+  // Debounce search query for API calls
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((p) => p.ticker.toLowerCase().includes(query));
+  // Build API URL with filters
+  const buildApiUrl = useCallback((page: number) => {
+    const params = new URLSearchParams();
+    params.set('page', page.toString());
+    params.set('limit', ITEMS_PER_PAGE.toString());
+
+    if (debouncedSearch) {
+      params.set('search', debouncedSearch);
     }
 
-    // Model filter
     if (modelFilter !== 'all') {
-      filtered = filtered.filter((p) => p.modelType === modelFilter);
+      params.set('model', modelFilter);
     }
 
-    // Result filter
     if (resultFilter !== 'all') {
-      if (resultFilter === 'pending') {
-        filtered = filtered.filter((p) => p.wasCorrect === null);
-      } else if (resultFilter === 'correct') {
-        filtered = filtered.filter((p) => p.wasCorrect === true);
-      } else if (resultFilter === 'wrong') {
-        filtered = filtered.filter((p) => p.wasCorrect === false);
-      }
+      params.set('result', resultFilter);
     }
 
-    // Direction filter
     if (directionFilter !== 'all') {
-      filtered = filtered.filter((p) => p.predictedDirection === directionFilter);
+      params.set('direction', directionFilter);
     }
 
-    // Confidence filter
-    filtered = filtered.filter((p) => p.confidence * 100 >= minConfidence);
+    if (minConfidence > 0) {
+      params.set('minConfidence', minConfidence.toString());
+    }
 
-    // Date range filter
+    // Handle date range
     if (dateRange === 'custom') {
-      // Custom date range
       if (customStartDate) {
-        const startDate = new Date(customStartDate);
-        startDate.setHours(0, 0, 0, 0);
-        filtered = filtered.filter((p) => p.predictionDate >= startDate);
+        params.set('startDate', customStartDate);
       }
       if (customEndDate) {
-        const endDate = new Date(customEndDate);
-        endDate.setHours(23, 59, 59, 999);
-        filtered = filtered.filter((p) => p.predictionDate <= endDate);
+        params.set('endDate', customEndDate);
       }
     } else if (dateRange !== 'all') {
-      const now = new Date();
       const daysMap = { '7d': 7, '30d': 30, '90d': 90 };
-      const cutoffDate = new Date(now.getTime() - daysMap[dateRange] * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter((p) => p.predictionDate >= cutoffDate);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysMap[dateRange]);
+      params.set('startDate', cutoffDate.toISOString().split('T')[0]);
     }
 
-    return filtered;
-  }, [predictions, searchQuery, modelFilter, resultFilter, directionFilter, minConfidence, dateRange, customStartDate, customEndDate]);
+    return `/api/predictions?${params.toString()}`;
+  }, [debouncedSearch, modelFilter, resultFilter, directionFilter, minConfidence, dateRange, customStartDate, customEndDate]);
 
-  // Group predictions by company ticker
+  // Fetch predictions from API
+  const fetchPredictions = useCallback(async (page: number) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const url = buildApiUrl(page);
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch predictions');
+      }
+
+      const data = await response.json();
+
+      // Parse dates from API response
+      const parsedPredictions = data.predictions.map((p: Record<string, unknown>) => ({
+        ...p,
+        targetDate: new Date(p.targetDate as string),
+        predictionDate: new Date(p.predictionDate as string),
+        targetTime: p.targetTime ? new Date(p.targetTime as string) : null,
+      }));
+
+      setPredictions(parsedPredictions);
+      setPagination(data.pagination);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch predictions');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [buildApiUrl]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, modelFilter, resultFilter, directionFilter, minConfidence, dateRange, customStartDate, customEndDate]);
+
+  // Fetch predictions when page or filters change
+  useEffect(() => {
+    fetchPredictions(currentPage);
+  }, [currentPage, fetchPredictions]);
+
+  // Group predictions by company ticker (for grouped view)
   const groupedPredictions = useMemo(() => {
     const groups: Record<string, GroupedPredictions> = {};
 
-    for (const pred of filteredPredictions) {
+    for (const pred of predictions) {
       if (!groups[pred.ticker]) {
         groups[pred.ticker] = {
           ticker: pred.ticker,
@@ -145,7 +207,7 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
 
     // Return sorted by latest date
     return Object.values(groups).sort((a, b) => b.latestDate.getTime() - a.latestDate.getTime());
-  }, [filteredPredictions]);
+  }, [predictions]);
 
   const toggleExpandedTicker = (ticker: string) => {
     setExpandedTickers(prev => {
@@ -187,6 +249,13 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
     return targetDateTime <= now;
   };
 
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    if (page >= 1 && (!pagination || page <= pagination.totalPages)) {
+      setCurrentPage(page);
+    }
+  };
+
   return (
     <div className="bg-surface rounded-lg border border-border p-4 md:p-6">
       {/* Header with Search and Filter Toggle */}
@@ -195,7 +264,18 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
           <div>
             <h2 className="text-lg md:text-xl font-semibold text-text-primary">Recent Predictions</h2>
             <p className="text-xs text-text-muted mt-1">
-              {filteredPredictions.length} of {predictions.length} predictions
+              {pagination ? (
+                <>
+                  {predictions.length} of {pagination.totalCount.toLocaleString()} predictions
+                  {pagination.totalPages > 1 && (
+                    <span className="ml-2">
+                      (Page {pagination.page} of {pagination.totalPages})
+                    </span>
+                  )}
+                </>
+              ) : (
+                'Loading...'
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -227,7 +307,7 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <input
             type="text"
-            placeholder="Search by ticker..."
+            placeholder="Search by ticker (searches all predictions)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-9 py-2 bg-background border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
@@ -380,8 +460,29 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
         </div>
       )}
 
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          <span className="ml-2 text-text-muted">Loading predictions...</span>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !isLoading && (
+        <div className="text-center py-12">
+          <p className="text-negative text-sm mb-2">Error: {error}</p>
+          <button
+            onClick={() => fetchPredictions(currentPage)}
+            className="text-primary text-sm hover:underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
       {/* Grouped View */}
-      {viewMode === 'grouped' && groupedPredictions.length > 0 && (
+      {!isLoading && !error && viewMode === 'grouped' && groupedPredictions.length > 0 && (
         <div className="space-y-4">
           {groupedPredictions.map((group) => (
             <GroupedPredictionCard
@@ -396,11 +497,11 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
       )}
 
       {/* List View - Mobile: Card Layout */}
-      {viewMode === 'list' && filteredPredictions.length > 0 ? (
+      {!isLoading && !error && viewMode === 'list' && predictions.length > 0 ? (
         <>
           {/* Mobile Cards (< lg) */}
           <div className="lg:hidden space-y-3">
-            {filteredPredictions.map((pred) => {
+            {predictions.map((pred) => {
               const isDue = isPredictionDue(pred);
               return (
                 <div
@@ -583,7 +684,7 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
                 </tr>
               </thead>
               <tbody>
-                {filteredPredictions.map((pred) => {
+                {predictions.map((pred) => {
                   const isDue = isPredictionDue(pred);
                   return (
                     <tr key={pred.id} className="border-b border-border/50 hover:bg-background/50">
@@ -762,7 +863,7 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
             </table>
           </div>
         </>
-      ) : viewMode === 'list' ? (
+      ) : viewMode === 'list' && !isLoading && !error ? (
         <div className="text-center py-12">
           <p className="text-text-muted text-sm">
             {hasActiveFilters
@@ -773,13 +874,86 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
       ) : null}
 
       {/* Empty state for grouped view */}
-      {viewMode === 'grouped' && groupedPredictions.length === 0 && (
+      {!isLoading && !error && viewMode === 'grouped' && groupedPredictions.length === 0 && (
         <div className="text-center py-12">
           <p className="text-text-muted text-sm">
             {hasActiveFilters
               ? 'No predictions match your filters'
               : 'No predictions available yet'}
           </p>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {!isLoading && !error && pagination && pagination.totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+          <div className="text-xs text-text-muted">
+            Showing {((pagination.page - 1) * pagination.limit) + 1}-
+            {Math.min(pagination.page * pagination.limit, pagination.totalCount)} of{' '}
+            {pagination.totalCount.toLocaleString()}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => goToPage(1)}
+              disabled={!pagination.hasPrevPage}
+              className="px-2 py-1 text-xs bg-background border border-border rounded hover:border-primary/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              First
+            </button>
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={!pagination.hasPrevPage}
+              className="p-1 bg-background border border-border rounded hover:border-primary/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {/* Page Numbers */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (pagination.totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= pagination.totalPages - 2) {
+                  pageNum = pagination.totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => goToPage(pageNum)}
+                    className={`px-3 py-1 text-xs rounded transition-colors ${
+                      pageNum === currentPage
+                        ? 'bg-primary text-background'
+                        : 'bg-background border border-border hover:border-primary/30'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={!pagination.hasNextPage}
+              className="p-1 bg-background border border-border rounded hover:border-primary/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => goToPage(pagination.totalPages)}
+              disabled={!pagination.hasNextPage}
+              className="px-2 py-1 text-xs bg-background border border-border rounded hover:border-primary/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Last
+            </button>
+          </div>
         </div>
       )}
     </div>

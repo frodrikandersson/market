@@ -144,7 +144,7 @@ export default async function PerformancePage() {
         </div>
 
         {/* Recent Predictions */}
-        <RecentPredictionsTable predictions={data.recentPredictions} />
+        <RecentPredictionsTable />
 
         {/* Disclaimer */}
         <div className="mt-12 p-4 bg-surface/50 rounded-lg border border-border">
