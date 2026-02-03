@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Filter, X, ChevronDown, Calendar } from 'lucide-react';
+import { Filter, X, ChevronDown, Calendar, Search } from 'lucide-react';
 import Link from 'next/link';
 
 interface Prediction {
@@ -43,6 +43,7 @@ interface GroupedPredictions {
 
 export function RecentPredictionsTable({ predictions }: RecentPredictionsTableProps) {
   const [showFilters, setShowFilters] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [modelFilter, setModelFilter] = useState<ModelFilter>('all');
   const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>('all');
@@ -56,6 +57,12 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
   // Filter predictions
   const filteredPredictions = useMemo(() => {
     let filtered = [...predictions];
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((p) => p.ticker.toLowerCase().includes(query));
+    }
 
     // Model filter
     if (modelFilter !== 'all') {
@@ -102,7 +109,7 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
     }
 
     return filtered;
-  }, [predictions, modelFilter, resultFilter, directionFilter, minConfidence, dateRange, customStartDate, customEndDate]);
+  }, [predictions, searchQuery, modelFilter, resultFilter, directionFilter, minConfidence, dateRange, customStartDate, customEndDate]);
 
   // Group predictions by company ticker
   const groupedPredictions = useMemo(() => {
@@ -153,6 +160,7 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
   };
 
   const hasActiveFilters =
+    searchQuery !== '' ||
     modelFilter !== 'all' ||
     resultFilter !== 'all' ||
     directionFilter !== 'all' ||
@@ -162,6 +170,7 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
     customEndDate !== '';
 
   const clearFilters = () => {
+    setSearchQuery('');
     setModelFilter('all');
     setResultFilter('all');
     setDirectionFilter('all');
@@ -180,35 +189,57 @@ export function RecentPredictionsTable({ predictions }: RecentPredictionsTablePr
 
   return (
     <div className="bg-surface rounded-lg border border-border p-4 md:p-6">
-      {/* Header with Filter Toggle */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-lg md:text-xl font-semibold text-text-primary">Recent Predictions</h2>
-          <p className="text-xs text-text-muted mt-1">
-            {filteredPredictions.length} of {predictions.length} predictions
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {hasActiveFilters && (
+      {/* Header with Search and Filter Toggle */}
+      <div className="flex flex-col gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg md:text-xl font-semibold text-text-primary">Recent Predictions</h2>
+            <p className="text-xs text-text-muted mt-1">
+              {filteredPredictions.length} of {predictions.length} predictions
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="px-3 py-1.5 text-xs bg-negative/10 text-negative border border-negative/30 rounded hover:bg-negative/20 transition-colors flex items-center gap-1"
+              >
+                <X className="w-3 h-3" />
+                Clear
+              </button>
+            )}
             <button
-              onClick={clearFilters}
-              className="px-3 py-1.5 text-xs bg-negative/10 text-negative border border-negative/30 rounded hover:bg-negative/20 transition-colors flex items-center gap-1"
-            >
-              <X className="w-3 h-3" />
-              Clear
-            </button>
-          )}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-2 ${
-              showFilters || hasActiveFilters
-                ? 'bg-primary/20 text-primary border border-primary/30'
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-2 ${
+                showFilters || hasActiveFilters
+                  ? 'bg-primary/20 text-primary border border-primary/30'
                 : 'bg-background text-text-secondary border border-border hover:border-primary/30'
             }`}
           >
             <Filter className="w-3 h-3" />
             Filters
           </button>
+        </div>
+        </div>
+
+        {/* Search Field */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Search by ticker..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-9 py-2 bg-background border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
