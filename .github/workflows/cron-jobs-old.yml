@@ -1,189 +1,189 @@
-name: Scheduled Cron Jobs
+# name: Scheduled Cron Jobs
 
-on:
-  schedule:
-    # Fetch data every 30 minutes
-    - cron: '*/30 * * * *'
+# on:
+#   schedule:
+#     # Fetch data every 30 minutes
+#     - cron: '*/30 * * * *'
 
-    # Fetch stock prices every 10 minutes (prioritized batch of 150)
-    - cron: '*/10 * * * *'
+#     # Fetch stock prices every 10 minutes (prioritized batch of 150)
+#     - cron: '*/10 * * * *'
 
-    # Backlog processor every 2 hours
-    - cron: '0 */2 * * *'
+#     # Backlog processor every 2 hours
+#     - cron: '0 */2 * * *'
 
-    # Run predictions daily at 5 PM ET (10 PM UTC)
-    - cron: '0 22 * * *'
+#     # Run predictions daily at 5 PM ET (10 PM UTC)
+#     - cron: '0 22 * * *'
 
-    # Track predictions daily at 9:30 AM ET (2:30 PM UTC)
-    - cron: '30 14 * * 1-5'  # Weekdays only
+#     # Track predictions daily at 9:30 AM ET (2:30 PM UTC)
+#     - cron: '30 14 * * 1-5'  # Weekdays only
 
-    # Auto-trade every 2 hours during market hours (weekdays 10AM-4PM ET = 15:00-21:00 UTC)
-    - cron: '0 15,17,19,21 * * 1-5'
+#     # Auto-trade every 2 hours during market hours (weekdays 10AM-4PM ET = 15:00-21:00 UTC)
+#     - cron: '0 15,17,19,21 * * 1-5'
 
-  # Allow manual triggering
-  workflow_dispatch:
-    inputs:
-      job:
-        description: 'Which job to run'
-        required: true
-        type: choice
-        options:
-          - fetch-data
-          - fetch-prices
-          - backlog-processor
-          - run-predictions
-          - track-predictions
-          - auto-trade
-          - all
+#   # Allow manual triggering
+#   workflow_dispatch:
+#     inputs:
+#       job:
+#         description: 'Which job to run'
+#         required: true
+#         type: choice
+#         options:
+#           - fetch-data
+#           - fetch-prices
+#           - backlog-processor
+#           - run-predictions
+#           - track-predictions
+#           - auto-trade
+#           - all
 
-jobs:
-  fetch-data:
-    runs-on: ubuntu-latest
-    # Run every 30 minutes or when manually triggered
-    if: github.event.schedule == '*/30 * * * *' || github.event.inputs.job == 'fetch-data' || github.event.inputs.job == 'all'
+# jobs:
+#   fetch-data:
+#     runs-on: ubuntu-latest
+#     # Run every 30 minutes or when manually triggered
+#     if: github.event.schedule == '*/30 * * * *' || github.event.inputs.job == 'fetch-data' || github.event.inputs.job == 'all'
 
-    steps:
-      - name: Fetch Data
-        run: |
-          echo "Fetching data from all sources..."
+#     steps:
+#       - name: Fetch Data
+#         run: |
+#           echo "Fetching data from all sources..."
 
-          response=$(curl -s -w "\n%{http_code}" \
-            "${{ secrets.APP_URL }}/api/cron/fetch-data?secret=${{ secrets.CRON_SECRET }}")
+#           response=$(curl -s -w "\n%{http_code}" \
+#             "${{ secrets.APP_URL }}/api/cron/fetch-data?secret=${{ secrets.CRON_SECRET }}")
 
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n-1)
+#           http_code=$(echo "$response" | tail -n1)
+#           body=$(echo "$response" | head -n-1)
 
-          echo "Response: $body"
+#           echo "Response: $body"
 
-          if [ "$http_code" -ne 200 ]; then
-            echo "Error: HTTP $http_code"
-            exit 1
-          fi
+#           if [ "$http_code" -ne 200 ]; then
+#             echo "Error: HTTP $http_code"
+#             exit 1
+#           fi
 
-          echo "✓ Data fetch completed successfully"
+#           echo "✓ Data fetch completed successfully"
 
-  fetch-prices:
-    runs-on: ubuntu-latest
-    # Run every 10 minutes (prioritized batch) or when manually triggered
-    if: github.event.schedule == '*/10 * * * *' || github.event.inputs.job == 'fetch-prices' || github.event.inputs.job == 'all'
+#   fetch-prices:
+#     runs-on: ubuntu-latest
+#     # Run every 10 minutes (prioritized batch) or when manually triggered
+#     if: github.event.schedule == '*/10 * * * *' || github.event.inputs.job == 'fetch-prices' || github.event.inputs.job == 'all'
 
-    steps:
-      - name: Fetch Stock Prices (Prioritized Batch of 150)
-        run: |
-          echo "Fetching 150 stock prices (prioritized: predictions > new > stale)..."
+#     steps:
+#       - name: Fetch Stock Prices (Prioritized Batch of 150)
+#         run: |
+#           echo "Fetching 150 stock prices (prioritized: predictions > new > stale)..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 120 \
-            "${{ secrets.APP_URL }}/api/cron/fetch-prices?secret=${{ secrets.CRON_SECRET }}")
+#           response=$(curl -s -w "\n%{http_code}" -m 120 \
+#             "${{ secrets.APP_URL }}/api/cron/fetch-prices?secret=${{ secrets.CRON_SECRET }}")
 
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n-1)
+#           http_code=$(echo "$response" | tail -n1)
+#           body=$(echo "$response" | head -n-1)
 
-          echo "Response: $body"
+#           echo "Response: $body"
 
-          if [ "$http_code" -ne 200 ]; then
-            echo "Error: HTTP $http_code"
-            exit 1
-          fi
+#           if [ "$http_code" -ne 200 ]; then
+#             echo "Error: HTTP $http_code"
+#             exit 1
+#           fi
 
-          echo "✓ Stock prices updated successfully"
+#           echo "✓ Stock prices updated successfully"
 
-  backlog-processor:
-    runs-on: ubuntu-latest
-    # Run every 2 hours or when manually triggered
-    if: github.event.schedule == '0 */2 * * *' || github.event.inputs.job == 'backlog-processor' || github.event.inputs.job == 'all'
+#   backlog-processor:
+#     runs-on: ubuntu-latest
+#     # Run every 2 hours or when manually triggered
+#     if: github.event.schedule == '0 */2 * * *' || github.event.inputs.job == 'backlog-processor' || github.event.inputs.job == 'all'
 
-    steps:
-      - name: Process Backlog
-        run: |
-          echo "Processing backlog with AI..."
+#     steps:
+#       - name: Process Backlog
+#         run: |
+#           echo "Processing backlog with AI..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 1800 \
-            "${{ secrets.APP_URL }}/api/cron/backlog-processor?secret=${{ secrets.CRON_SECRET }}")
+#           response=$(curl -s -w "\n%{http_code}" -m 1800 \
+#             "${{ secrets.APP_URL }}/api/cron/backlog-processor?secret=${{ secrets.CRON_SECRET }}")
 
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n-1)
+#           http_code=$(echo "$response" | tail -n1)
+#           body=$(echo "$response" | head -n-1)
 
-          echo "Response: $body"
+#           echo "Response: $body"
 
-          if [ "$http_code" -ne 200 ]; then
-            echo "Error: HTTP $http_code"
-            exit 1
-          fi
+#           if [ "$http_code" -ne 200 ]; then
+#             echo "Error: HTTP $http_code"
+#             exit 1
+#           fi
 
-          echo "✓ Backlog processing completed successfully"
+#           echo "✓ Backlog processing completed successfully"
 
-  run-predictions:
-    runs-on: ubuntu-latest
-    # Run daily at 5 PM ET or when manually triggered
-    if: github.event.schedule == '0 22 * * *' || github.event.inputs.job == 'run-predictions' || github.event.inputs.job == 'all'
+#   run-predictions:
+#     runs-on: ubuntu-latest
+#     # Run daily at 5 PM ET or when manually triggered
+#     if: github.event.schedule == '0 22 * * *' || github.event.inputs.job == 'run-predictions' || github.event.inputs.job == 'all'
 
-    steps:
-      - name: Generate Predictions
-        run: |
-          echo "Generating daily predictions..."
+#     steps:
+#       - name: Generate Predictions
+#         run: |
+#           echo "Generating daily predictions..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 900 \
-            "${{ secrets.APP_URL }}/api/cron/run-predictions?secret=${{ secrets.CRON_SECRET }}")
+#           response=$(curl -s -w "\n%{http_code}" -m 900 \
+#             "${{ secrets.APP_URL }}/api/cron/run-predictions?secret=${{ secrets.CRON_SECRET }}")
 
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n-1)
+#           http_code=$(echo "$response" | tail -n1)
+#           body=$(echo "$response" | head -n-1)
 
-          echo "Response: $body"
+#           echo "Response: $body"
 
-          if [ "$http_code" -ne 200 ]; then
-            echo "Error: HTTP $http_code"
-            exit 1
-          fi
+#           if [ "$http_code" -ne 200 ]; then
+#             echo "Error: HTTP $http_code"
+#             exit 1
+#           fi
 
-          echo "✓ Predictions generated successfully"
+#           echo "✓ Predictions generated successfully"
 
-  track-predictions:
-    runs-on: ubuntu-latest
-    # Run weekdays at 9:30 AM ET or when manually triggered
-    if: github.event.schedule == '30 14 * * 1-5' || github.event.inputs.job == 'track-predictions' || github.event.inputs.job == 'all'
+#   track-predictions:
+#     runs-on: ubuntu-latest
+#     # Run weekdays at 9:30 AM ET or when manually triggered
+#     if: github.event.schedule == '30 14 * * 1-5' || github.event.inputs.job == 'track-predictions' || github.event.inputs.job == 'all'
 
-    steps:
-      - name: Track Real-Time Predictions
-        run: |
-          echo "Tracking prediction accuracy..."
+#     steps:
+#       - name: Track Real-Time Predictions
+#         run: |
+#           echo "Tracking prediction accuracy..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 180 \
-            "${{ secrets.APP_URL }}/api/cron/track-predictions?secret=${{ secrets.CRON_SECRET }}")
+#           response=$(curl -s -w "\n%{http_code}" -m 180 \
+#             "${{ secrets.APP_URL }}/api/cron/track-predictions?secret=${{ secrets.CRON_SECRET }}")
 
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n-1)
+#           http_code=$(echo "$response" | tail -n1)
+#           body=$(echo "$response" | head -n-1)
 
-          echo "Response: $body"
+#           echo "Response: $body"
 
-          if [ "$http_code" -ne 200 ]; then
-            echo "Error: HTTP $http_code"
-            exit 1
-          fi
+#           if [ "$http_code" -ne 200 ]; then
+#             echo "Error: HTTP $http_code"
+#             exit 1
+#           fi
 
-          echo "✓ Prediction tracking completed successfully"
+#           echo "✓ Prediction tracking completed successfully"
 
-  auto-trade:
-    runs-on: ubuntu-latest
-    # Run every 2 hours during market hours (10AM, 12PM, 2PM, 4PM ET) weekdays
-    # Also runs after daily predictions at 5PM ET (22:00 UTC)
-    if: github.event.schedule == '0 15,17,19,21 * * 1-5' || github.event.schedule == '0 22 * * *' || github.event.inputs.job == 'auto-trade' || github.event.inputs.job == 'all'
+#   auto-trade:
+#     runs-on: ubuntu-latest
+#     # Run every 2 hours during market hours (10AM, 12PM, 2PM, 4PM ET) weekdays
+#     # Also runs after daily predictions at 5PM ET (22:00 UTC)
+#     if: github.event.schedule == '0 15,17,19,21 * * 1-5' || github.event.schedule == '0 22 * * *' || github.event.inputs.job == 'auto-trade' || github.event.inputs.job == 'all'
 
-    steps:
-      - name: Execute Auto-Trading (Buy & Sell Check)
-        run: |
-          echo "Executing AI auto-trading - checking buy/sell signals..."
+#     steps:
+#       - name: Execute Auto-Trading (Buy & Sell Check)
+#         run: |
+#           echo "Executing AI auto-trading - checking buy/sell signals..."
 
-          response=$(curl -s -w "\n%{http_code}" -m 300 \
-            "${{ secrets.APP_URL }}/api/cron/auto-trade?secret=${{ secrets.CRON_SECRET }}")
+#           response=$(curl -s -w "\n%{http_code}" -m 300 \
+#             "${{ secrets.APP_URL }}/api/cron/auto-trade?secret=${{ secrets.CRON_SECRET }}")
 
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n-1)
+#           http_code=$(echo "$response" | tail -n1)
+#           body=$(echo "$response" | head -n-1)
 
-          echo "Response: $body"
+#           echo "Response: $body"
 
-          if [ "$http_code" -ne 200 ]; then
-            echo "Error: HTTP $http_code"
-            exit 1
-          fi
+#           if [ "$http_code" -ne 200 ]; then
+#             echo "Error: HTTP $http_code"
+#             exit 1
+#           fi
 
-          echo "✓ Auto-trading completed successfully"
+#           echo "✓ Auto-trading completed successfully"
